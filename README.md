@@ -8,6 +8,10 @@
   A production-ready Electron + React + TypeScript desktop application template.
 </p>
 
+<p align="center">
+  <em>Built from lessons learned creating production desktop apps including <a href="https://www.usestoryflow.com">StoryFlow</a>.</em>
+</p>
+
 ## Features
 
 - **Auto-updates** via GitHub Releases (electron-updater)
