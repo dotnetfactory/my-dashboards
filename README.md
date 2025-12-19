@@ -1,6 +1,12 @@
 # Desktop Starter App
 
-A production-ready Electron + React + TypeScript desktop application template.
+<p align="center">
+  <img src="assets/logo.png" alt="Desktop Starter App" width="200">
+</p>
+
+<p align="center">
+  A production-ready Electron + React + TypeScript desktop application template.
+</p>
 
 ## Features
 
@@ -12,6 +18,21 @@ A production-ready Electron + React + TypeScript desktop application template.
 - **CI/CD** with GitHub Actions
 - **Code signing** support for macOS (notarization ready)
 - **Dark mode** support
+
+## Try the Demo
+
+Download the latest release to see the template in action:
+
+**[Download from GitHub Releases](https://github.com/dotnetfactory/desktop-starter-app/releases)**
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `DesktopStarterApp-x.x.x-arm64.dmg` |
+| macOS (Intel) | `DesktopStarterApp-x.x.x-x64.dmg` |
+| Windows | `DesktopStarterApp-x.x.x.Setup.exe` |
+| Linux | `desktop-starter-app_x.x.x_amd64.deb` |
+
+> **Test auto-updates:** Download an older version from [releases](https://github.com/dotnetfactory/desktop-starter-app/releases), install it, and watch it automatically update to the latest version!
 
 ## Quick Start
 
