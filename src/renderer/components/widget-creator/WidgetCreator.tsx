@@ -1,16 +1,25 @@
 import React, { useState } from 'react';
-import { X, ArrowLeft, ArrowRight, Globe, MousePointer, Clock, Key, Check } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight, Globe, MousePointer, Clock, Key, Check, Plus } from 'lucide-react';
 import { useWidgets } from '../../hooks/useWidgets';
-import type { SelectorType, SelectorData, SaveCredentialsData } from '../../../types/dashboard';
+import { useCredentialGroups } from '../../hooks/useCredentialGroups';
+import { CredentialGroupCreator } from '../credential-groups/CredentialGroupCreator';
+import type {
+  SelectorType,
+  SelectorData,
+  SaveCredentialsData,
+  CreateCredentialGroupData,
+} from '../../../types/dashboard';
 
 interface WidgetCreatorProps {
   onClose: () => void;
 }
 
 type Step = 'url' | 'selector' | 'settings' | 'auth';
+type AuthMode = 'credential-group' | 'per-widget' | 'none';
 
 export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactElement {
   const { createWidget } = useWidgets();
+  const { groups, createGroup } = useCredentialGroups();
   const [step, setStep] = useState<Step>('url');
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
@@ -18,6 +27,13 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
   const [selectorData, setSelectorData] = useState<SelectorData | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(300);
   const [hasCredentials, setHasCredentials] = useState(false);
+
+  // Auth mode state
+  const [authMode, setAuthMode] = useState<AuthMode>('credential-group');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [showGroupCreator, setShowGroupCreator] = useState(false);
+
+  // Per-widget credentials (legacy mode)
   const [credentials, setCredentials] = useState<SaveCredentialsData>({
     username: '',
     password: '',
@@ -48,7 +64,6 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
   const handleOpenCredentialPicker = async () => {
     setLoading(true);
     try {
-      // Find the login URL - use the widget URL or the loginUrl if specified
       const loginPageUrl = credentials.loginUrl || url;
       const result = await window.api.credentialPicker.open(loginPageUrl);
       if (result.success && result.data) {
@@ -66,20 +81,33 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
     }
   };
 
+  const handleCreateCredentialGroup = async (data: CreateCredentialGroupData) => {
+    const group = await createGroup(data);
+    if (group) {
+      setSelectedGroupId(group.id);
+      setShowGroupCreator(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!selectorType || !selectorData) return;
 
     setLoading(true);
     try {
+      // Determine credential group ID based on auth mode
+      const credentialGroupId = authMode === 'credential-group' && selectedGroupId ? selectedGroupId : undefined;
+
       const widget = await createWidget({
         name: name || new URL(url).hostname,
         url,
         selectorType,
         selectorData,
         refreshInterval,
+        credentialGroupId,
       });
 
-      if (widget && hasCredentials && credentials.username) {
+      // Only save per-widget credentials if using legacy mode
+      if (widget && authMode === 'per-widget' && credentials.username) {
         await window.api.credentials.save(widget.id, credentials);
       }
 
@@ -97,6 +125,17 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
     }
     return input;
   };
+
+  // If showing the credential group creator, render it instead
+  if (showGroupCreator) {
+    return (
+      <CredentialGroupCreator
+        onClose={() => setShowGroupCreator(false)}
+        onCreate={handleCreateCredentialGroup}
+        defaultLoginUrl={url}
+      />
+    );
+  }
 
   const renderStep = () => {
     switch (step) {
@@ -229,58 +268,117 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
 
       case 'auth': {
         const hasSelectors = credentials.usernameSelector && credentials.passwordSelector;
+        const canCreate =
+          authMode === 'credential-group'
+            ? !!selectedGroupId
+            : credentials.username && credentials.password && hasSelectors;
+
         return (
           <div className="creator-step">
             <div className="step-header">
               <Key size={24} />
-              <h3>Login Credentials</h3>
-              <p>Configure auto-login for when the session expires</p>
+              <h3>Authentication</h3>
+              <p>Configure how this widget will authenticate</p>
             </div>
-            <div className="step-content auth-form">
-              <input
-                type="text"
-                value={credentials.username}
-                onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-                placeholder="Username or email"
-              />
-              <input
-                type="password"
-                value={credentials.password}
-                onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                placeholder="Password"
-              />
-              <input
-                type="text"
-                value={credentials.loginUrl}
-                onChange={(e) => setCredentials({ ...credentials, loginUrl: e.target.value })}
-                placeholder="Login page URL (leave empty to use widget URL)"
-              />
-              <div className="selector-picker-section">
-                <button
-                  className={`selector-btn ${hasSelectors ? 'selected' : ''}`}
-                  onClick={handleOpenCredentialPicker}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div className="spinner small"></div>
-                      Opening...
-                    </>
-                  ) : hasSelectors ? (
-                    <>
-                      <Check size={20} />
-                      Form Fields Selected
-                    </>
-                  ) : (
-                    <>
-                      <MousePointer size={20} />
-                      Select Login Form Fields
-                    </>
-                  )}
-                </button>
-                <p className="hint">
-                  Click to open the login page and select the username field, password field, and submit button
-                </p>
+            <div className="step-content">
+              <div className="auth-options">
+                {/* Credential Group Option */}
+                <label className="auth-option">
+                  <input
+                    type="radio"
+                    name="authMode"
+                    value="credential-group"
+                    checked={authMode === 'credential-group'}
+                    onChange={() => setAuthMode('credential-group')}
+                  />
+                  <div className="auth-option-content">
+                    <strong>Use Credential Group (Recommended)</strong>
+                    <p>Share credentials and session with other widgets</p>
+                  </div>
+                </label>
+
+                {authMode === 'credential-group' && (
+                  <div className="credential-group-selector">
+                    <select
+                      value={selectedGroupId}
+                      onChange={(e) => setSelectedGroupId(e.target.value)}
+                    >
+                      <option value="">Select a credential group...</option>
+                      {groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name} ({group.username})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="create-new-btn"
+                      onClick={() => setShowGroupCreator(true)}
+                    >
+                      <Plus size={14} />
+                      Create New Credential Group
+                    </button>
+                  </div>
+                )}
+
+                {/* Per-Widget Option */}
+                <label className="auth-option">
+                  <input
+                    type="radio"
+                    name="authMode"
+                    value="per-widget"
+                    checked={authMode === 'per-widget'}
+                    onChange={() => setAuthMode('per-widget')}
+                  />
+                  <div className="auth-option-content">
+                    <strong>Widget-Specific Credentials</strong>
+                    <p>Store credentials only for this widget (isolated session)</p>
+                  </div>
+                </label>
+
+                {authMode === 'per-widget' && (
+                  <div className="credential-group-selector">
+                    <input
+                      type="text"
+                      value={credentials.username}
+                      onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+                      placeholder="Username or email"
+                    />
+                    <input
+                      type="password"
+                      value={credentials.password}
+                      onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                      placeholder="Password"
+                    />
+                    <input
+                      type="text"
+                      value={credentials.loginUrl}
+                      onChange={(e) => setCredentials({ ...credentials, loginUrl: e.target.value })}
+                      placeholder="Login page URL (optional)"
+                    />
+                    <button
+                      className={`selector-btn ${hasSelectors ? 'selected' : ''}`}
+                      onClick={handleOpenCredentialPicker}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <div className="spinner small"></div>
+                          Opening...
+                        </>
+                      ) : hasSelectors ? (
+                        <>
+                          <Check size={20} />
+                          Form Fields Selected
+                        </>
+                      ) : (
+                        <>
+                          <MousePointer size={20} />
+                          Select Login Form Fields
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="step-actions">
@@ -291,7 +389,7 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
               <button
                 className="primary"
                 onClick={handleCreate}
-                disabled={loading || !credentials.username || !credentials.password || !hasSelectors}
+                disabled={loading || !canCreate}
               >
                 Create Widget
                 {loading && <div className="spinner small"></div>}

@@ -1027,3 +1027,223 @@ label {
 .react-grid-item > .react-resizable-handle::after {
   border-color: var(--color-text-muted);
 }
+
+/* ==========================================
+   Credential Group Manager
+   ========================================== */
+
+.credential-group-manager {
+  padding: var(--space-lg);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.manager-header {
+  margin-bottom: var(--space-lg);
+}
+
+.manager-header .header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.manager-header .header-title svg {
+  color: var(--color-primary);
+}
+
+.manager-header h2 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.manager-description {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.manager-actions {
+  margin-bottom: var(--space-lg);
+}
+
+.manager-actions .primary {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.manager-actions .primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-2xl);
+  color: var(--color-text-muted);
+}
+
+.groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.group-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s ease;
+}
+
+.group-item:hover {
+  border-color: var(--color-primary);
+}
+
+.group-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.group-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--color-primary);
+}
+
+.group-details h4 {
+  font-size: var(--text-base);
+  font-weight: 500;
+  margin-bottom: var(--space-xs);
+}
+
+.group-meta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.group-meta .separator {
+  color: var(--color-border);
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.delete-confirm-text {
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  margin-right: var(--space-sm);
+}
+
+button.small {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-xs);
+}
+
+button.danger {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+button.danger:hover {
+  background: var(--color-error);
+  color: white;
+}
+
+.manager-footer {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Auth Mode Selector in Widget Creator */
+.auth-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.auth-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.auth-option:hover {
+  border-color: var(--color-primary);
+}
+
+.auth-option input[type="radio"] {
+  width: auto;
+  margin-top: 2px;
+}
+
+.auth-option-content {
+  flex: 1;
+}
+
+.auth-option-content strong {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-xs);
+}
+
+.auth-option-content p {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.credential-group-selector {
+  margin-top: var(--space-md);
+  margin-left: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.credential-group-selector select {
+  flex: 1;
+}
+
+.credential-group-selector .create-new-btn {
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.credential-group-selector .create-new-btn:hover {
+  text-decoration: underline;
+  background: transparent;
+}

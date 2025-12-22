@@ -7,7 +7,8 @@ import Database from 'better-sqlite3';
  * - settings: Application settings key-value store
  * - dashboards: User-created dashboards
  * - widgets: Web snippet widgets within dashboards
- * - widget_credentials: Encrypted login credentials for widgets
+ * - widget_credentials: Encrypted login credentials for widgets (per-widget)
+ * - credential_groups: Shared credential groups for multiple widgets
  */
 
 export function initializeDatabase(db: Database.Database): void {
@@ -20,6 +21,10 @@ export function initializeDatabase(db: Database.Database): void {
   createDashboardsTable(db);
   createWidgetsTable(db);
   createWidgetCredentialsTable(db);
+  createCredentialGroupsTable(db);
+
+  // Run migrations
+  runMigrations(db);
 
   console.log('Database schema initialization complete');
 }
@@ -151,5 +156,60 @@ function createWidgetCredentialsTable(db: Database.Database): void {
       );
     `);
     console.log('widget_credentials table created successfully');
+  }
+}
+
+function createCredentialGroupsTable(db: Database.Database): void {
+  const tableExists = db
+    .prepare(
+      `
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='credential_groups'
+  `
+    )
+    .get();
+
+  if (!tableExists) {
+    console.log('Creating credential_groups table...');
+    db.exec(`
+      CREATE TABLE credential_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        -- Encrypted using Electron's safeStorage API
+        encrypted_username BLOB,
+        encrypted_password BLOB,
+        -- Login form configuration
+        login_url TEXT NOT NULL,
+        username_selector TEXT NOT NULL,
+        password_selector TEXT NOT NULL,
+        submit_selector TEXT,
+        -- Session partition (shared by all widgets using this group)
+        partition TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    console.log('credential_groups table created successfully');
+  }
+}
+
+function runMigrations(db: Database.Database): void {
+  // Migration: Add credential_group_id column to widgets table
+  const hasCredentialGroupId = db
+    .prepare(
+      `
+    SELECT COUNT(*) as count FROM pragma_table_info('widgets')
+    WHERE name = 'credential_group_id'
+  `
+    )
+    .get() as { count: number };
+
+  if (hasCredentialGroupId.count === 0) {
+    console.log('Running migration: Adding credential_group_id to widgets...');
+    db.exec(`
+      ALTER TABLE widgets ADD COLUMN credential_group_id TEXT
+        REFERENCES credential_groups(id) ON DELETE SET NULL
+    `);
+    console.log('Migration complete: credential_group_id added to widgets');
   }
 }

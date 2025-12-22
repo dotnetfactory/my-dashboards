@@ -16,6 +16,10 @@ import type {
   SaveCredentialsData,
   WidgetCredentials,
   PickerSelection,
+  CredentialGroup,
+  CredentialGroupWithPassword,
+  CreateCredentialGroupData,
+  UpdateCredentialGroupData,
 } from './dashboard';
 
 export interface IPCError {
@@ -151,6 +155,18 @@ export interface CredentialPickerAPI {
 }
 
 /**
+ * Credential Groups API for managing shared credentials
+ */
+export interface CredentialGroupsAPI {
+  list: () => Promise<IPCResponse<CredentialGroup[]>>;
+  create: (data: CreateCredentialGroupData) => Promise<IPCResponse<CredentialGroup>>;
+  get: (id: string) => Promise<IPCResponse<CredentialGroup | null>>;
+  update: (id: string, data: UpdateCredentialGroupData) => Promise<IPCResponse<CredentialGroup>>;
+  delete: (id: string) => Promise<IPCResponse<void>>;
+  getCredentials: (id: string) => Promise<IPCResponse<CredentialGroupWithPassword | null>>;
+}
+
+/**
  * Main window API interface
  */
 export interface WindowAPI {
@@ -162,6 +178,7 @@ export interface WindowAPI {
   dashboards: DashboardsAPI;
   widgets: WidgetsAPI;
   credentials: CredentialsAPI;
+  credentialGroups: CredentialGroupsAPI;
   widgetPicker: WidgetPickerAPI;
   credentialPicker: CredentialPickerAPI;
 }

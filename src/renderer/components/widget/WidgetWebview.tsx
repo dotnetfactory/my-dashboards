@@ -2,6 +2,16 @@
 import React, { useRef, useEffect, useState } from 'react';
 import type { Widget, CssSelectorData, CropSelectorData, WidgetCredentials } from '../../../types/dashboard';
 
+// Common interface for credentials from either source
+interface LoginCredentials {
+  username: string;
+  password: string;
+  loginUrl: string;
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector: string;
+}
+
 interface WidgetWebviewProps {
   widget: Widget;
   refreshKey: number;
@@ -57,10 +67,32 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       // If widget has credentials and we're on a login page, handle login first
       if (widget.hasCredentials && isOnLoginPage) {
         try {
-          const result = await window.api.credentials.get(widget.id);
-          if (result.success && result.data) {
-            const credentials = result.data as WidgetCredentials;
+          let credentials: LoginCredentials | null = null;
 
+          // First try credential group (shared credentials)
+          if (widget.credentialGroupId) {
+            const groupResult = await window.api.credentialGroups.getCredentials(widget.credentialGroupId);
+            if (groupResult.success && groupResult.data) {
+              credentials = {
+                username: groupResult.data.username,
+                password: groupResult.data.password,
+                loginUrl: groupResult.data.loginUrl,
+                usernameSelector: groupResult.data.usernameSelector,
+                passwordSelector: groupResult.data.passwordSelector,
+                submitSelector: groupResult.data.submitSelector,
+              };
+            }
+          }
+
+          // Fall back to per-widget credentials if no credential group
+          if (!credentials) {
+            const widgetResult = await window.api.credentials.get(widget.id);
+            if (widgetResult.success && widgetResult.data) {
+              credentials = widgetResult.data as WidgetCredentials;
+            }
+          }
+
+          if (credentials) {
             // Check if credentials' loginUrl matches (if specified)
             const shouldLogin =
               !credentials.loginUrl ||
@@ -214,7 +246,7 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       webview.removeEventListener('did-fail-load', handleDidFail);
       webview.removeEventListener('did-finish-load', handleDidFinishLoad);
     };
-  }, [widget.id, widget.url, widget.hasCredentials, widget.selectorType, widget.selectorData, refreshKey]);
+  }, [widget.id, widget.url, widget.hasCredentials, widget.credentialGroupId, widget.selectorType, widget.selectorData, refreshKey]);
 
   // Reload webview when refreshKey changes
   useEffect(() => {
@@ -237,7 +269,7 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
 
   const performAutoLogin = async (
     webview: Electron.WebviewTag,
-    credentials: WidgetCredentials
+    credentials: LoginCredentials
   ) => {
     try {
       const usernameSelector = credentials.usernameSelector;

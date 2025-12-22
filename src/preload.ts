@@ -14,6 +14,8 @@ import type {
   WidgetPosition,
   SaveCredentialsData,
   PickerSelection,
+  CreateCredentialGroupData,
+  UpdateCredentialGroupData,
 } from './types/dashboard';
 
 // Settings API
@@ -105,6 +107,17 @@ const credentialPickerAPI = {
   open: (url: string) => ipcRenderer.invoke('credentialPicker:open', url),
 };
 
+// Credential Groups API
+const credentialGroupsAPI = {
+  list: () => ipcRenderer.invoke('credentialGroups:list'),
+  create: (data: CreateCredentialGroupData) => ipcRenderer.invoke('credentialGroups:create', data),
+  get: (id: string) => ipcRenderer.invoke('credentialGroups:get', id),
+  update: (id: string, data: UpdateCredentialGroupData) =>
+    ipcRenderer.invoke('credentialGroups:update', id, data),
+  delete: (id: string) => ipcRenderer.invoke('credentialGroups:delete', id),
+  getCredentials: (id: string) => ipcRenderer.invoke('credentialGroups:getCredentials', id),
+};
+
 // Expose APIs to renderer
 contextBridge.exposeInMainWorld('api', {
   settings: settingsAPI,
@@ -115,6 +128,7 @@ contextBridge.exposeInMainWorld('api', {
   dashboards: dashboardsAPI,
   widgets: widgetsAPI,
   credentials: credentialsAPI,
+  credentialGroups: credentialGroupsAPI,
   widgetPicker: widgetPickerAPI,
   credentialPicker: credentialPickerAPI,
 });

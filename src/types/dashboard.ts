@@ -55,6 +55,7 @@ export interface Widget {
   zoomLevel: number;
   partition: string;
   hasCredentials: boolean;
+  credentialGroupId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -71,6 +72,7 @@ export interface CreateWidgetData {
   gridRowSpan?: number;
   refreshInterval?: number;
   zoomLevel?: number;
+  credentialGroupId?: string;
 }
 
 export interface UpdateWidgetData {
@@ -84,6 +86,7 @@ export interface UpdateWidgetData {
   gridRowSpan?: number;
   refreshInterval?: number;
   zoomLevel?: number;
+  credentialGroupId?: string | null;
 }
 
 export interface WidgetPosition {
@@ -145,6 +148,7 @@ export interface WidgetRow {
   zoom_level: number;
   partition: string;
   has_credentials: number;
+  credential_group_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -157,6 +161,58 @@ export interface WidgetCredentialsRow {
   username_selector: string;
   password_selector: string;
   submit_selector: string;
+  created_at: number;
+  updated_at: number;
+}
+
+// Credential group types (shared credentials for multiple widgets)
+export interface CredentialGroup {
+  id: string;
+  name: string;
+  username: string;
+  loginUrl: string;
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector: string;
+  partition: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CredentialGroupWithPassword extends CredentialGroup {
+  password: string;
+}
+
+export interface CreateCredentialGroupData {
+  name: string;
+  username: string;
+  password: string;
+  loginUrl: string;
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector?: string;
+}
+
+export interface UpdateCredentialGroupData {
+  name?: string;
+  username?: string;
+  password?: string;
+  loginUrl?: string;
+  usernameSelector?: string;
+  passwordSelector?: string;
+  submitSelector?: string;
+}
+
+export interface CredentialGroupRow {
+  id: string;
+  name: string;
+  encrypted_username: Buffer;
+  encrypted_password: Buffer;
+  login_url: string;
+  username_selector: string;
+  password_selector: string;
+  submit_selector: string | null;
+  partition: string;
   created_at: number;
   updated_at: number;
 }
@@ -188,6 +244,25 @@ export function widgetFromRow(row: WidgetRow): Widget {
     zoomLevel: row.zoom_level,
     partition: row.partition,
     hasCredentials: row.has_credentials === 1,
+    credentialGroupId: row.credential_group_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function credentialGroupFromRow(
+  row: CredentialGroupRow,
+  decryptedUsername: string
+): CredentialGroup {
+  return {
+    id: row.id,
+    name: row.name,
+    username: decryptedUsername,
+    loginUrl: row.login_url,
+    usernameSelector: row.username_selector,
+    passwordSelector: row.password_selector,
+    submitSelector: row.submit_selector || '',
+    partition: row.partition,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

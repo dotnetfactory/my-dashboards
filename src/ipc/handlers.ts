@@ -12,14 +12,21 @@ import type {
   DashboardRow,
   WidgetRow,
   WidgetCredentialsRow,
+  CredentialGroupRow,
   CreateDashboardData,
   UpdateDashboardData,
   CreateWidgetData,
   UpdateWidgetData,
   WidgetPosition,
   SaveCredentialsData,
+  CreateCredentialGroupData,
+  UpdateCredentialGroupData,
 } from '../types/dashboard';
-import { dashboardFromRow as todashhboard, widgetFromRow as toWidget } from '../types/dashboard';
+import {
+  dashboardFromRow as todashhboard,
+  widgetFromRow as toWidget,
+  credentialGroupFromRow as toCredentialGroup,
+} from '../types/dashboard';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -309,15 +316,30 @@ export function registerIPCHandlers(): void {
       const db = getDatabase();
       const id = generateId();
       const now = Date.now();
-      const partition = `widget-${id}`;
+
+      // Determine partition: use credential group's partition if specified
+      let partition = `widget-${id}`;
+      let hasCredentials = 0;
+      let credentialGroupId: string | null = null;
+
+      if (data.credentialGroupId) {
+        const group = db
+          .prepare('SELECT partition FROM credential_groups WHERE id = ?')
+          .get(data.credentialGroupId) as { partition: string } | undefined;
+        if (group) {
+          partition = group.partition;
+          hasCredentials = 1;
+          credentialGroupId = data.credentialGroupId;
+        }
+      }
 
       db.prepare(`
         INSERT INTO widgets (
           id, dashboard_id, name, url, selector_type, selector_data,
           grid_col, grid_row, grid_col_span, grid_row_span,
           refresh_interval, zoom_level, partition, has_credentials,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          credential_group_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.dashboardId,
@@ -332,7 +354,8 @@ export function registerIPCHandlers(): void {
         data.refreshInterval ?? 300,
         data.zoomLevel ?? 1.0,
         partition,
-        0,
+        hasCredentials,
+        credentialGroupId,
         now,
         now
       );
@@ -359,7 +382,7 @@ export function registerIPCHandlers(): void {
       const db = getDatabase();
       const now = Date.now();
       const updates: string[] = ['updated_at = ?'];
-      const values: (string | number)[] = [now];
+      const values: (string | number | null)[] = [now];
 
       if (data.name !== undefined) {
         updates.push('name = ?');
@@ -400,6 +423,32 @@ export function registerIPCHandlers(): void {
       if (data.zoomLevel !== undefined) {
         updates.push('zoom_level = ?');
         values.push(data.zoomLevel);
+      }
+
+      // Handle credential group association
+      if (data.credentialGroupId !== undefined) {
+        if (data.credentialGroupId === null) {
+          // Removing credential group - reset to widget-specific partition
+          updates.push('credential_group_id = ?');
+          values.push(null);
+          updates.push('partition = ?');
+          values.push(`widget-${id}`);
+          updates.push('has_credentials = ?');
+          values.push(0);
+        } else {
+          // Associating with credential group
+          const group = db
+            .prepare('SELECT partition FROM credential_groups WHERE id = ?')
+            .get(data.credentialGroupId) as { partition: string } | undefined;
+          if (group) {
+            updates.push('credential_group_id = ?');
+            values.push(data.credentialGroupId);
+            updates.push('partition = ?');
+            values.push(group.partition);
+            updates.push('has_credentials = ?');
+            values.push(1);
+          }
+        }
       }
 
       values.push(id);
@@ -542,6 +591,175 @@ export function registerIPCHandlers(): void {
       return { success: true, data: row?.has_credentials === 1 };
     } catch (error) {
       return { success: false, error: { code: 'HAS_CREDENTIALS_ERROR', message: String(error) } };
+    }
+  });
+
+  // ============= Credential Groups =============
+
+  ipcMain.handle('credentialGroups:list', async () => {
+    try {
+      const db = getDatabase();
+      const rows = db.prepare('SELECT * FROM credential_groups ORDER BY name').all() as CredentialGroupRow[];
+      return {
+        success: true,
+        data: rows.map((row) => toCredentialGroup(row, safeStorage.decryptString(row.encrypted_username))),
+      };
+    } catch (error) {
+      return { success: false, error: { code: 'LIST_CREDENTIAL_GROUPS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentialGroups:create', async (_, data: CreateCredentialGroupData) => {
+    try {
+      const db = getDatabase();
+      const id = generateId();
+      const now = Date.now();
+      const partition = `credential-group-${id}`;
+
+      const encryptedUsername = safeStorage.encryptString(data.username);
+      const encryptedPassword = safeStorage.encryptString(data.password);
+
+      db.prepare(`
+        INSERT INTO credential_groups (
+          id, name, encrypted_username, encrypted_password,
+          login_url, username_selector, password_selector, submit_selector,
+          partition, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        data.name,
+        encryptedUsername,
+        encryptedPassword,
+        data.loginUrl,
+        data.usernameSelector,
+        data.passwordSelector,
+        data.submitSelector || null,
+        partition,
+        now,
+        now
+      );
+
+      const row = db.prepare('SELECT * FROM credential_groups WHERE id = ?').get(id) as CredentialGroupRow;
+      return { success: true, data: toCredentialGroup(row, data.username) };
+    } catch (error) {
+      return { success: false, error: { code: 'CREATE_CREDENTIAL_GROUP_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentialGroups:get', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      const row = db.prepare('SELECT * FROM credential_groups WHERE id = ?').get(id) as CredentialGroupRow | undefined;
+
+      if (!row) {
+        return { success: true, data: null };
+      }
+
+      const username = safeStorage.decryptString(row.encrypted_username);
+      return { success: true, data: toCredentialGroup(row, username) };
+    } catch (error) {
+      return { success: false, error: { code: 'GET_CREDENTIAL_GROUP_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentialGroups:update', async (_, id: string, data: UpdateCredentialGroupData) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+      const updates: string[] = ['updated_at = ?'];
+      const values: (string | number | Buffer | null)[] = [now];
+
+      if (data.name !== undefined) {
+        updates.push('name = ?');
+        values.push(data.name);
+      }
+      if (data.username !== undefined) {
+        updates.push('encrypted_username = ?');
+        values.push(safeStorage.encryptString(data.username));
+      }
+      if (data.password !== undefined) {
+        updates.push('encrypted_password = ?');
+        values.push(safeStorage.encryptString(data.password));
+      }
+      if (data.loginUrl !== undefined) {
+        updates.push('login_url = ?');
+        values.push(data.loginUrl);
+      }
+      if (data.usernameSelector !== undefined) {
+        updates.push('username_selector = ?');
+        values.push(data.usernameSelector);
+      }
+      if (data.passwordSelector !== undefined) {
+        updates.push('password_selector = ?');
+        values.push(data.passwordSelector);
+      }
+      if (data.submitSelector !== undefined) {
+        updates.push('submit_selector = ?');
+        values.push(data.submitSelector || null);
+      }
+
+      values.push(id);
+      db.prepare(`UPDATE credential_groups SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+      const row = db.prepare('SELECT * FROM credential_groups WHERE id = ?').get(id) as CredentialGroupRow;
+      const username = safeStorage.decryptString(row.encrypted_username);
+      return { success: true, data: toCredentialGroup(row, username) };
+    } catch (error) {
+      return { success: false, error: { code: 'UPDATE_CREDENTIAL_GROUP_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentialGroups:delete', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+
+      // First, clear credential_group_id from any widgets using this group
+      // and reset their partitions to widget-specific ones
+      const widgetsUsingGroup = db
+        .prepare('SELECT id FROM widgets WHERE credential_group_id = ?')
+        .all(id) as { id: string }[];
+
+      for (const widget of widgetsUsingGroup) {
+        db.prepare(`
+          UPDATE widgets SET
+            credential_group_id = NULL,
+            has_credentials = 0,
+            partition = ?,
+            updated_at = ?
+          WHERE id = ?
+        `).run(`widget-${widget.id}`, now, widget.id);
+      }
+
+      // Then delete the group
+      db.prepare('DELETE FROM credential_groups WHERE id = ?').run(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'DELETE_CREDENTIAL_GROUP_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentialGroups:getCredentials', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      const row = db.prepare('SELECT * FROM credential_groups WHERE id = ?').get(id) as CredentialGroupRow | undefined;
+
+      if (!row) {
+        return { success: true, data: null };
+      }
+
+      const username = safeStorage.decryptString(row.encrypted_username);
+      const password = safeStorage.decryptString(row.encrypted_password);
+
+      return {
+        success: true,
+        data: {
+          ...toCredentialGroup(row, username),
+          password,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: { code: 'GET_CREDENTIAL_GROUP_CREDENTIALS_ERROR', message: String(error) } };
     }
   });
 
