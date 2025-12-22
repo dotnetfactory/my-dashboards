@@ -1,11 +1,14 @@
 /**
- * Desktop Starter App - Main App Component
+ * My Dashboards - Main App Component
  */
 
 import React, { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import { Settings } from 'lucide-react';
 import { Settings as SettingsModal } from './components/Settings';
+import { DashboardProvider } from './context/DashboardContext';
+import { DashboardSidebar } from './components/dashboard/DashboardSidebar';
+import { DashboardView } from './components/dashboard/DashboardView';
 
 export default function App() {
   const [showSettings, setShowSettings] = useState(false);
@@ -42,49 +45,35 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-left">
-          <div className="app-logo">
-            <h1 className="app-title">Desktop Starter App</h1>
+    <DashboardProvider>
+      <div className="app-container">
+        {/* Header */}
+        <header className="app-header">
+          <div className="header-left">
+            <div className="app-logo">
+              <h1 className="app-title">My Dashboards</h1>
+            </div>
           </div>
-        </div>
-        <div className="header-right">
-          <button onClick={() => setShowSettings(true)} className="settings-button">
-            <Settings size={18} />
-            <span>Settings</span>
-          </button>
-        </div>
-      </header>
+          <div className="header-right">
+            <span className="version-badge">v{appVersion}</span>
+            <button onClick={() => setShowSettings(true)} className="settings-button">
+              <Settings size={18} />
+            </button>
+          </div>
+        </header>
 
-      {/* Main Content */}
-      <main className="app-main">
-        <div className="welcome-content">
-          <h2>Welcome to Your Desktop App</h2>
-          <p>
-            This is a starter template for building Electron + React + TypeScript desktop applications.
-          </p>
-          <p>It includes:</p>
-          <ul className="feature-list">
-            <li>Auto-updates via GitHub Releases</li>
-            <li>SQLite database with settings storage</li>
-            <li>Window state persistence</li>
-            <li>Cross-platform builds (macOS, Windows, Linux)</li>
-            <li>CI/CD with GitHub Actions</li>
-          </ul>
-          <p className="version-info">Version {appVersion}</p>
-          <p className="cta-text">
-            Edit <code>src/renderer/App.tsx</code> to start building your app.
-          </p>
-        </div>
-      </main>
+        {/* Main Content */}
+        <main className="app-main">
+          <DashboardSidebar />
+          <DashboardView />
+        </main>
 
-      {/* Settings Modal */}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+        {/* Settings Modal */}
+        {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
-      {/* Toast notifications */}
-      <Toaster position="bottom-right" richColors />
-    </div>
+        {/* Toast notifications */}
+        <Toaster position="bottom-right" richColors />
+      </div>
+    </DashboardProvider>
   );
 }

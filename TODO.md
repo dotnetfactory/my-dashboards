@@ -1,0 +1,4 @@
+- [ ] open source
+- [ ] update readme
+- [ ] ask for users' help to share on hacker news
+- [ ] 

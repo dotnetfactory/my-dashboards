@@ -5,6 +5,19 @@
  * Add your own API types following the pattern below.
  */
 
+import type {
+  Dashboard,
+  Widget,
+  CreateDashboardData,
+  UpdateDashboardData,
+  CreateWidgetData,
+  UpdateWidgetData,
+  WidgetPosition,
+  SaveCredentialsData,
+  WidgetCredentials,
+  PickerSelection,
+} from './dashboard';
+
 export interface IPCError {
   message: string;
   code?: string;
@@ -80,6 +93,64 @@ export interface AppAPI {
 }
 
 /**
+ * Dashboards API for managing dashboards
+ */
+export interface DashboardsAPI {
+  list: () => Promise<IPCResponse<Dashboard[]>>;
+  create: (data: CreateDashboardData) => Promise<IPCResponse<Dashboard>>;
+  get: (id: string) => Promise<IPCResponse<Dashboard | null>>;
+  update: (id: string, data: UpdateDashboardData) => Promise<IPCResponse<Dashboard>>;
+  delete: (id: string) => Promise<IPCResponse<void>>;
+}
+
+/**
+ * Widgets API for managing dashboard widgets
+ */
+export interface WidgetsAPI {
+  list: (dashboardId: string) => Promise<IPCResponse<Widget[]>>;
+  create: (data: CreateWidgetData) => Promise<IPCResponse<Widget>>;
+  get: (id: string) => Promise<IPCResponse<Widget | null>>;
+  update: (id: string, data: UpdateWidgetData) => Promise<IPCResponse<Widget>>;
+  delete: (id: string) => Promise<IPCResponse<void>>;
+  updatePositions: (positions: WidgetPosition[]) => Promise<IPCResponse<void>>;
+}
+
+/**
+ * Credentials API for managing widget authentication
+ */
+export interface CredentialsAPI {
+  save: (widgetId: string, credentials: SaveCredentialsData) => Promise<IPCResponse<void>>;
+  get: (widgetId: string) => Promise<IPCResponse<WidgetCredentials | null>>;
+  delete: (widgetId: string) => Promise<IPCResponse<void>>;
+  hasCredentials: (widgetId: string) => Promise<IPCResponse<boolean>>;
+}
+
+/**
+ * Widget Picker API for element selection
+ */
+export interface WidgetPickerAPI {
+  open: (url: string) => Promise<IPCResponse<PickerSelection | null>>;
+  onSelectionComplete: (callback: (selection: PickerSelection) => void) => void;
+  removeSelectionListener: () => void;
+}
+
+/**
+ * Credential picker selection result
+ */
+export interface CredentialPickerSelection {
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector: string;
+}
+
+/**
+ * Credential Picker API for login form field selection
+ */
+export interface CredentialPickerAPI {
+  open: (url: string) => Promise<IPCResponse<CredentialPickerSelection | null>>;
+}
+
+/**
  * Main window API interface
  */
 export interface WindowAPI {
@@ -88,6 +159,11 @@ export interface WindowAPI {
   shell: ShellAPI;
   database: DatabaseAPI;
   app: AppAPI;
+  dashboards: DashboardsAPI;
+  widgets: WidgetsAPI;
+  credentials: CredentialsAPI;
+  widgetPicker: WidgetPickerAPI;
+  credentialPicker: CredentialPickerAPI;
 }
 
 declare global {

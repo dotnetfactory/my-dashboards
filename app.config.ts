@@ -1,5 +1,5 @@
 /**
- * Desktop Starter App - Application Configuration
+ * My Dashboards - Application Configuration
  *
  * This file contains all app-specific configuration that gets baked into the build.
  * It is committed to version control and shared across the team.
@@ -13,13 +13,13 @@ export const config = {
   // ===========================================================================
 
   /** App name shown in OS (menu bar, dock, task manager) */
-  productName: 'Desktop Starter App',
+  productName: 'My Dashboards',
 
   /** Binary/executable name (lowercase, hyphens) */
-  executableName: 'desktop-starter-app',
+  executableName: 'my-dashboards',
 
   /** macOS bundle identifier (reverse domain notation) */
-  appBundleId: 'com.example.desktop-starter-app',
+  appBundleId: 'com.emadibrahim.my-dashboards',
 
   /** macOS app category */
   appCategory: 'public.app-category.productivity',
@@ -29,10 +29,10 @@ export const config = {
   // ===========================================================================
 
   /** Folder name in user's app data directory (~/Library/Application Support on macOS) */
-  appDataFolder: 'DesktopStarterApp',
+  appDataFolder: 'MyDashboards',
 
   /** SQLite database filename */
-  dbFilename: 'app.db',
+  dbFilename: 'dashboards.db',
 
   // ===========================================================================
   // GITHUB (for releases & auto-updates)
@@ -43,7 +43,7 @@ export const config = {
     owner: 'dotnetfactory',
 
     /** Repository name */
-    repo: 'desktop-starter-app',
+    repo: 'my-dashboards',
 
     /** Set to true if repository is private (requires GH_TOKEN secret) */
     private: false,

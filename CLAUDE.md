@@ -69,6 +69,8 @@ Uses SQLite with better-sqlite3. WAL mode enabled for concurrent access.
 
 Schema defined in `src/database/schema.ts`.
 
+IMPORTANT: When making changes to existing tables, make sure to create migrations in separate files.
+
 ### IPC Pattern
 
 All IPC handlers return `IPCResponse<T>`:

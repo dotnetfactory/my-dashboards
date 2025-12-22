@@ -1,14 +1,29 @@
 /**
- * IPC Handlers for Desktop Starter App
+ * IPC Handlers for My Dashboards
  *
  * Registers all IPC handlers for the main process.
- * Add your own handlers following the pattern below.
  */
 
-import { ipcMain, dialog, shell, app } from 'electron';
+import { ipcMain, dialog, shell, app, safeStorage } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { getDatabase, closeDatabase, getCurrentDatabasePath } from '../database/connection';
 import { getDatabaseInfo, migrateDatabase, getDefaultDatabasePath, saveDatabaseConfig } from '../database/config';
+import type {
+  DashboardRow,
+  WidgetRow,
+  WidgetCredentialsRow,
+  CreateDashboardData,
+  UpdateDashboardData,
+  CreateWidgetData,
+  UpdateWidgetData,
+  WidgetPosition,
+  SaveCredentialsData,
+} from '../types/dashboard';
+import { dashboardFromRow as todashhboard, widgetFromRow as toWidget } from '../types/dashboard';
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
 
 /**
  * Register all IPC handlers
@@ -202,16 +217,333 @@ export function registerIPCHandlers(): void {
     return { success: true };
   });
 
-  // ============= Add Your Handlers Below =============
-  // Example:
-  // ipcMain.handle('myFeature:doSomething', async (_, arg: string) => {
-  //   try {
-  //     // Your logic here
-  //     return { success: true, data: result };
-  //   } catch (error) {
-  //     return { success: false, error: { code: 'MY_ERROR', message: String(error) } };
-  //   }
-  // });
+  // ============= Dashboards =============
+
+  ipcMain.handle('dashboards:list', async () => {
+    try {
+      const db = getDatabase();
+      const rows = db.prepare('SELECT * FROM dashboards ORDER BY updated_at DESC').all() as DashboardRow[];
+      return { success: true, data: rows.map(todashhboard) };
+    } catch (error) {
+      return { success: false, error: { code: 'LIST_DASHBOARDS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('dashboards:create', async (_, data: CreateDashboardData) => {
+    try {
+      const db = getDatabase();
+      const id = generateId();
+      const now = Date.now();
+      db.prepare(`
+        INSERT INTO dashboards (id, name, grid_columns, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, data.name, data.gridColumns ?? 12, now, now);
+      const row = db.prepare('SELECT * FROM dashboards WHERE id = ?').get(id) as DashboardRow;
+      return { success: true, data: todashhboard(row) };
+    } catch (error) {
+      return { success: false, error: { code: 'CREATE_DASHBOARD_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('dashboards:get', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      const row = db.prepare('SELECT * FROM dashboards WHERE id = ?').get(id) as DashboardRow | undefined;
+      return { success: true, data: row ? todashhboard(row) : null };
+    } catch (error) {
+      return { success: false, error: { code: 'GET_DASHBOARD_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('dashboards:update', async (_, id: string, data: UpdateDashboardData) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+      const updates: string[] = ['updated_at = ?'];
+      const values: (string | number)[] = [now];
+
+      if (data.name !== undefined) {
+        updates.push('name = ?');
+        values.push(data.name);
+      }
+      if (data.gridColumns !== undefined) {
+        updates.push('grid_columns = ?');
+        values.push(data.gridColumns);
+      }
+
+      values.push(id);
+      db.prepare(`UPDATE dashboards SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      const row = db.prepare('SELECT * FROM dashboards WHERE id = ?').get(id) as DashboardRow;
+      return { success: true, data: todashhboard(row) };
+    } catch (error) {
+      return { success: false, error: { code: 'UPDATE_DASHBOARD_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('dashboards:delete', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      db.prepare('DELETE FROM dashboards WHERE id = ?').run(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'DELETE_DASHBOARD_ERROR', message: String(error) } };
+    }
+  });
+
+  // ============= Widgets =============
+
+  ipcMain.handle('widgets:list', async (_, dashboardId: string) => {
+    try {
+      const db = getDatabase();
+      const rows = db
+        .prepare('SELECT * FROM widgets WHERE dashboard_id = ? ORDER BY grid_row, grid_col')
+        .all(dashboardId) as WidgetRow[];
+      return { success: true, data: rows.map(toWidget) };
+    } catch (error) {
+      return { success: false, error: { code: 'LIST_WIDGETS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('widgets:create', async (_, data: CreateWidgetData) => {
+    try {
+      const db = getDatabase();
+      const id = generateId();
+      const now = Date.now();
+      const partition = `widget-${id}`;
+
+      db.prepare(`
+        INSERT INTO widgets (
+          id, dashboard_id, name, url, selector_type, selector_data,
+          grid_col, grid_row, grid_col_span, grid_row_span,
+          refresh_interval, zoom_level, partition, has_credentials,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        data.dashboardId,
+        data.name,
+        data.url,
+        data.selectorType,
+        JSON.stringify(data.selectorData),
+        data.gridCol ?? 0,
+        data.gridRow ?? 0,
+        data.gridColSpan ?? 4,
+        data.gridRowSpan ?? 3,
+        data.refreshInterval ?? 300,
+        data.zoomLevel ?? 1.0,
+        partition,
+        0,
+        now,
+        now
+      );
+
+      const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow;
+      return { success: true, data: toWidget(row) };
+    } catch (error) {
+      return { success: false, error: { code: 'CREATE_WIDGET_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('widgets:get', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow | undefined;
+      return { success: true, data: row ? toWidget(row) : null };
+    } catch (error) {
+      return { success: false, error: { code: 'GET_WIDGET_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('widgets:update', async (_, id: string, data: UpdateWidgetData) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+      const updates: string[] = ['updated_at = ?'];
+      const values: (string | number)[] = [now];
+
+      if (data.name !== undefined) {
+        updates.push('name = ?');
+        values.push(data.name);
+      }
+      if (data.url !== undefined) {
+        updates.push('url = ?');
+        values.push(data.url);
+      }
+      if (data.selectorType !== undefined) {
+        updates.push('selector_type = ?');
+        values.push(data.selectorType);
+      }
+      if (data.selectorData !== undefined) {
+        updates.push('selector_data = ?');
+        values.push(JSON.stringify(data.selectorData));
+      }
+      if (data.gridCol !== undefined) {
+        updates.push('grid_col = ?');
+        values.push(data.gridCol);
+      }
+      if (data.gridRow !== undefined) {
+        updates.push('grid_row = ?');
+        values.push(data.gridRow);
+      }
+      if (data.gridColSpan !== undefined) {
+        updates.push('grid_col_span = ?');
+        values.push(data.gridColSpan);
+      }
+      if (data.gridRowSpan !== undefined) {
+        updates.push('grid_row_span = ?');
+        values.push(data.gridRowSpan);
+      }
+      if (data.refreshInterval !== undefined) {
+        updates.push('refresh_interval = ?');
+        values.push(data.refreshInterval);
+      }
+      if (data.zoomLevel !== undefined) {
+        updates.push('zoom_level = ?');
+        values.push(data.zoomLevel);
+      }
+
+      values.push(id);
+      db.prepare(`UPDATE widgets SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as WidgetRow;
+      return { success: true, data: toWidget(row) };
+    } catch (error) {
+      return { success: false, error: { code: 'UPDATE_WIDGET_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('widgets:delete', async (_, id: string) => {
+    try {
+      const db = getDatabase();
+      db.prepare('DELETE FROM widgets WHERE id = ?').run(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'DELETE_WIDGET_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('widgets:updatePositions', async (_, positions: WidgetPosition[]) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+      const stmt = db.prepare(`
+        UPDATE widgets SET grid_col = ?, grid_row = ?, grid_col_span = ?, grid_row_span = ?, updated_at = ?
+        WHERE id = ?
+      `);
+
+      const updateMany = db.transaction((items: WidgetPosition[]) => {
+        for (const pos of items) {
+          stmt.run(pos.gridCol, pos.gridRow, pos.gridColSpan, pos.gridRowSpan, now, pos.id);
+        }
+      });
+
+      updateMany(positions);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'UPDATE_POSITIONS_ERROR', message: String(error) } };
+    }
+  });
+
+  // ============= Credentials =============
+
+  ipcMain.handle('credentials:save', async (_, widgetId: string, credentials: SaveCredentialsData) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+
+      // Encrypt credentials using OS keychain
+      const encryptedUsername = safeStorage.encryptString(credentials.username);
+      const encryptedPassword = safeStorage.encryptString(credentials.password);
+
+      db.prepare(`
+        INSERT INTO widget_credentials (
+          widget_id, encrypted_username, encrypted_password,
+          login_url, username_selector, password_selector, submit_selector,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(widget_id) DO UPDATE SET
+          encrypted_username = excluded.encrypted_username,
+          encrypted_password = excluded.encrypted_password,
+          login_url = excluded.login_url,
+          username_selector = excluded.username_selector,
+          password_selector = excluded.password_selector,
+          submit_selector = excluded.submit_selector,
+          updated_at = excluded.updated_at
+      `).run(
+        widgetId,
+        encryptedUsername,
+        encryptedPassword,
+        credentials.loginUrl,
+        credentials.usernameSelector,
+        credentials.passwordSelector,
+        credentials.submitSelector,
+        now,
+        now
+      );
+
+      // Update widget to indicate it has credentials
+      db.prepare('UPDATE widgets SET has_credentials = 1, updated_at = ? WHERE id = ?').run(now, widgetId);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'SAVE_CREDENTIALS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentials:get', async (_, widgetId: string) => {
+    try {
+      const db = getDatabase();
+      const row = db
+        .prepare('SELECT * FROM widget_credentials WHERE widget_id = ?')
+        .get(widgetId) as WidgetCredentialsRow | undefined;
+
+      if (!row) {
+        return { success: true, data: null };
+      }
+
+      // Decrypt credentials
+      const username = safeStorage.decryptString(row.encrypted_username);
+      const password = safeStorage.decryptString(row.encrypted_password);
+
+      return {
+        success: true,
+        data: {
+          widgetId: row.widget_id,
+          username,
+          password,
+          loginUrl: row.login_url,
+          usernameSelector: row.username_selector,
+          passwordSelector: row.password_selector,
+          submitSelector: row.submit_selector,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: { code: 'GET_CREDENTIALS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentials:delete', async (_, widgetId: string) => {
+    try {
+      const db = getDatabase();
+      const now = Date.now();
+      db.prepare('DELETE FROM widget_credentials WHERE widget_id = ?').run(widgetId);
+      db.prepare('UPDATE widgets SET has_credentials = 0, updated_at = ? WHERE id = ?').run(now, widgetId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: { code: 'DELETE_CREDENTIALS_ERROR', message: String(error) } };
+    }
+  });
+
+  ipcMain.handle('credentials:hasCredentials', async (_, widgetId: string) => {
+    try {
+      const db = getDatabase();
+      const row = db.prepare('SELECT has_credentials FROM widgets WHERE id = ?').get(widgetId) as
+        | { has_credentials: number }
+        | undefined;
+      return { success: true, data: row?.has_credentials === 1 };
+    } catch (error) {
+      return { success: false, error: { code: 'HAS_CREDENTIALS_ERROR', message: String(error) } };
+    }
+  });
 
   console.log('[IPC] All handlers registered');
 }

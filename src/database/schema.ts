@@ -1,12 +1,13 @@
 import Database from 'better-sqlite3';
 
 /**
- * Desktop Starter App Database Schema
+ * My Dashboards Database Schema
  *
  * Tables:
  * - settings: Application settings key-value store
- *
- * Add your own tables below by following the pattern.
+ * - dashboards: User-created dashboards
+ * - widgets: Web snippet widgets within dashboards
+ * - widget_credentials: Encrypted login credentials for widgets
  */
 
 export function initializeDatabase(db: Database.Database): void {
@@ -15,8 +16,10 @@ export function initializeDatabase(db: Database.Database): void {
   // Create settings table
   createSettingsTable(db);
 
-  // Add your table creation calls here
-  // Example: createYourTable(db);
+  // Create dashboard tables
+  createDashboardsTable(db);
+  createWidgetsTable(db);
+  createWidgetCredentialsTable(db);
 
   console.log('Database schema initialization complete');
 }
@@ -41,21 +44,112 @@ function createSettingsTable(db: Database.Database): void {
   }
 }
 
-// Example: Add your own tables
-// function createYourTable(db: Database.Database): void {
-//   const tableExists = db.prepare(`
-//     SELECT name FROM sqlite_master
-//     WHERE type='table' AND name='your_table'
-//   `).get();
-//
-//   if (!tableExists) {
-//     db.exec(`
-//       CREATE TABLE your_table (
-//         id TEXT PRIMARY KEY,
-//         name TEXT NOT NULL,
-//         created_at INTEGER NOT NULL,
-//         updated_at INTEGER NOT NULL
-//       );
-//     `);
-//   }
-// }
+function createDashboardsTable(db: Database.Database): void {
+  const tableExists = db
+    .prepare(
+      `
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='dashboards'
+  `
+    )
+    .get();
+
+  if (!tableExists) {
+    console.log('Creating dashboards table...');
+    db.exec(`
+      CREATE TABLE dashboards (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        grid_columns INTEGER NOT NULL DEFAULT 12,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    console.log('dashboards table created successfully');
+  }
+}
+
+function createWidgetsTable(db: Database.Database): void {
+  const tableExists = db
+    .prepare(
+      `
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='widgets'
+  `
+    )
+    .get();
+
+  if (!tableExists) {
+    console.log('Creating widgets table...');
+    db.exec(`
+      CREATE TABLE widgets (
+        id TEXT PRIMARY KEY,
+        dashboard_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+
+        -- Selector configuration: 'css' or 'crop'
+        selector_type TEXT NOT NULL CHECK(selector_type IN ('css', 'crop')),
+        -- JSON: {selector: string} for css, {x, y, width, height, scrollX, scrollY} for crop
+        selector_data TEXT NOT NULL,
+
+        -- Grid position (column and row based)
+        grid_col INTEGER NOT NULL DEFAULT 0,
+        grid_row INTEGER NOT NULL DEFAULT 0,
+        grid_col_span INTEGER NOT NULL DEFAULT 4,
+        grid_row_span INTEGER NOT NULL DEFAULT 3,
+
+        -- Display settings
+        refresh_interval INTEGER NOT NULL DEFAULT 300,
+        zoom_level REAL NOT NULL DEFAULT 1.0,
+
+        -- Session partition (unique per widget for isolated cookies/storage)
+        partition TEXT NOT NULL,
+
+        -- Auth configuration
+        has_credentials INTEGER NOT NULL DEFAULT 0,
+
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+
+        FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_widgets_dashboard_id ON widgets(dashboard_id);
+    `);
+    console.log('widgets table created successfully');
+  }
+}
+
+function createWidgetCredentialsTable(db: Database.Database): void {
+  const tableExists = db
+    .prepare(
+      `
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='widget_credentials'
+  `
+    )
+    .get();
+
+  if (!tableExists) {
+    console.log('Creating widget_credentials table...');
+    db.exec(`
+      CREATE TABLE widget_credentials (
+        widget_id TEXT PRIMARY KEY,
+        -- Encrypted using Electron's safeStorage API
+        encrypted_username BLOB,
+        encrypted_password BLOB,
+        -- Login form configuration
+        login_url TEXT,
+        username_selector TEXT,
+        password_selector TEXT,
+        submit_selector TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+
+        FOREIGN KEY (widget_id) REFERENCES widgets(id) ON DELETE CASCADE
+      );
+    `);
+    console.log('widget_credentials table created successfully');
+  }
+}

@@ -221,6 +221,14 @@ releaseDate: '${releaseDate}'
           entry: 'src/preload.ts',
           config: 'vite.preload.config.ts',
         },
+        {
+          entry: 'src/picker-preload.ts',
+          config: 'vite.preload.config.ts',
+        },
+        {
+          entry: 'src/credential-picker-preload.ts',
+          config: 'vite.preload.config.ts',
+        },
       ],
       renderer: [
         {

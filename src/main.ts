@@ -1,5 +1,5 @@
 /**
- * Desktop Starter App - Main Process Entry Point
+ * My Dashboards - Main Process Entry Point
  *
  * This is the main entry point for the Electron application.
  * It creates the browser window and initializes the application.
@@ -9,7 +9,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { app, BrowserWindow, Menu, nativeTheme, screen } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme, screen, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { autoUpdater } from 'electron-updater';
@@ -91,6 +91,117 @@ if (require('electron-squirrel-startup')) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let pickerWindow: BrowserWindow | null = null;
+let credentialPickerWindow: BrowserWindow | null = null;
+
+// Create credential picker window for selecting login form fields
+interface CredentialSelection {
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector: string;
+}
+
+const createCredentialPickerWindow = (url: string): Promise<CredentialSelection | null> => {
+  return new Promise((resolve) => {
+    credentialPickerWindow = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      parent: mainWindow || undefined,
+      modal: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'credential-picker-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+      title: 'Select Login Form Fields',
+    });
+
+    // Load the target URL
+    credentialPickerWindow.loadURL(url);
+
+    // Handle selection from credential picker
+    const handleSelection = (_: unknown, selection: CredentialSelection) => {
+      resolve(selection);
+      if (credentialPickerWindow) {
+        credentialPickerWindow.close();
+        credentialPickerWindow = null;
+      }
+    };
+
+    ipcMain.once('credentialPicker:selection', handleSelection);
+
+    credentialPickerWindow.on('closed', () => {
+      ipcMain.removeListener('credentialPicker:selection', handleSelection);
+      credentialPickerWindow = null;
+      resolve(null);
+    });
+  });
+};
+
+// Register credential picker IPC handler
+ipcMain.handle('credentialPicker:open', async (_, url: string) => {
+  try {
+    const selection = await createCredentialPickerWindow(url);
+    if (selection) {
+      return { success: true, data: selection };
+    }
+    return { success: true, data: null };
+  } catch (error) {
+    return { success: false, error: { code: 'CREDENTIAL_PICKER_ERROR', message: String(error) } };
+  }
+});
+
+// Create widget picker window for element selection
+const createPickerWindow = (url: string): Promise<{ url: string; selectorType: string; selectorData: unknown } | null> => {
+  return new Promise((resolve) => {
+    pickerWindow = new BrowserWindow({
+      width: 1400,
+      height: 900,
+      parent: mainWindow || undefined,
+      modal: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'picker-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+      title: 'Select Widget Content',
+    });
+
+    // Load the target URL
+    pickerWindow.loadURL(url);
+
+    // Handle selection from picker
+    const handleSelection = (_: unknown, selection: { url: string; selectorType: string; selectorData: unknown }) => {
+      resolve(selection);
+      if (pickerWindow) {
+        pickerWindow.close();
+        pickerWindow = null;
+      }
+    };
+
+    ipcMain.once('picker:selection', handleSelection);
+
+    pickerWindow.on('closed', () => {
+      ipcMain.removeListener('picker:selection', handleSelection);
+      pickerWindow = null;
+      resolve(null);
+    });
+  });
+};
+
+// Register widget picker IPC handler
+ipcMain.handle('widgetPicker:open', async (_, url: string) => {
+  try {
+    const selection = await createPickerWindow(url);
+    if (selection) {
+      mainWindow?.webContents.send('widgetPicker:selectionComplete', selection);
+      return { success: true, data: selection };
+    }
+    return { success: true, data: null };
+  } catch (error) {
+    return { success: false, error: { code: 'PICKER_ERROR', message: String(error) } };
+  }
+});
 
 const createWindow = (): void => {
   // Load saved window state
@@ -108,6 +219,7 @@ const createWindow = (): void => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true, // Enable webview tag for widget rendering
     },
     titleBarStyle: 'hiddenInset',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1a1a1a' : '#ffffff',
