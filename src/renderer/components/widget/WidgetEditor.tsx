@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Key, MousePointer, Check, Globe } from 'lucide-react';
+import { X, Clock, Key, MousePointer, Check, Globe, ZoomIn, ZoomOut } from 'lucide-react';
 import { useWidgets } from '../../hooks/useWidgets';
 import type { Widget, SaveCredentialsData, SelectorType, SelectorData } from '../../../types/dashboard';
 
@@ -16,6 +16,7 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
   const [selectorData, setSelectorData] = useState<SelectorData>(widget.selectorData);
   const [hasNewSelection, setHasNewSelection] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(widget.refreshInterval);
+  const [zoomLevel, setZoomLevel] = useState(widget.zoomLevel);
   const [hasCredentials, setHasCredentials] = useState(widget.hasCredentials);
   const [credentials, setCredentials] = useState<SaveCredentialsData>({
     username: '',
@@ -89,6 +90,7 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
       const updateData: Parameters<typeof updateWidget>[1] = {
         name,
         refreshInterval,
+        zoomLevel,
       };
 
       // Include URL if changed
@@ -204,6 +206,30 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
                 <option value={3600}>Every hour</option>
               </select>
             </label>
+          </div>
+
+          <div className="editor-section">
+            <label>
+              <ZoomIn size={16} />
+              Zoom Level
+            </label>
+            <div className="zoom-controls">
+              <button
+                className="zoom-btn"
+                onClick={() => setZoomLevel(Math.max(0.25, zoomLevel - 0.1))}
+                disabled={zoomLevel <= 0.25}
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span className="zoom-value">{Math.round(zoomLevel * 100)}%</span>
+              <button
+                className="zoom-btn"
+                onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
+                disabled={zoomLevel >= 2}
+              >
+                <ZoomIn size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="editor-section">

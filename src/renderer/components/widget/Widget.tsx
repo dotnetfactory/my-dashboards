@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { RefreshCw, Trash2, Settings, ExternalLink, GripVertical } from 'lucide-react';
+import { RefreshCw, Trash2, Settings, ExternalLink, GripVertical, Copy, ZoomIn, ZoomOut } from 'lucide-react';
 import { useWidgets } from '../../hooks/useWidgets';
+import { useDashboardContext } from '../../context/DashboardContext';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 import { WidgetWebview } from './WidgetWebview';
 import { WidgetEditor } from './WidgetEditor';
@@ -11,7 +12,8 @@ interface WidgetProps {
 }
 
 export function Widget({ widget }: WidgetProps): React.ReactElement {
-  const { deleteWidget } = useWidgets();
+  const { deleteWidget, createWidget, updateWidget } = useWidgets();
+  const { refreshWidgets } = useDashboardContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showEditor, setShowEditor] = useState(false);
@@ -56,6 +58,50 @@ export function Widget({ widget }: WidgetProps): React.ReactElement {
     handleRefresh(); // Refresh after editing
   };
 
+  const handleZoomIn = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const newZoom = Math.min(2, widget.zoomLevel + 0.1);
+    await updateWidget(widget.id, { zoomLevel: newZoom });
+  };
+
+  const handleZoomOut = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const newZoom = Math.max(0.25, widget.zoomLevel - 0.1);
+    await updateWidget(widget.id, { zoomLevel: newZoom });
+  };
+
+  const handleDuplicate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const newWidget = await createWidget({
+      name: `${widget.name} (copy)`,
+      url: widget.url,
+      selectorType: widget.selectorType,
+      selectorData: widget.selectorData,
+      refreshInterval: widget.refreshInterval,
+      zoomLevel: widget.zoomLevel,
+    });
+
+    // Copy credentials if the original widget has them
+    if (widget.hasCredentials && newWidget) {
+      const credResult = await window.api.credentials.get(widget.id);
+      if (credResult.success && credResult.data) {
+        await window.api.credentials.save(newWidget.id, {
+          username: credResult.data.username,
+          password: credResult.data.password,
+          loginUrl: credResult.data.loginUrl,
+          usernameSelector: credResult.data.usernameSelector,
+          passwordSelector: credResult.data.passwordSelector,
+          submitSelector: credResult.data.submitSelector,
+        });
+        // Refresh widgets to get updated has_credentials flag
+        await refreshWidgets();
+      }
+    }
+  };
+
   return (
     <>
       <div className="widget">
@@ -63,7 +109,7 @@ export function Widget({ widget }: WidgetProps): React.ReactElement {
           <div className="widget-drag-handle" title="Drag to move">
             <GripVertical size={14} />
           </div>
-          <span className="widget-title">{widget.name}</span>
+          <span className="widget-title" onMouseDown={(e) => e.stopPropagation()}>{widget.name}</span>
           <div className="widget-controls" onMouseDown={(e) => e.stopPropagation()}>
             <button
               className="widget-btn"
@@ -75,6 +121,25 @@ export function Widget({ widget }: WidgetProps): React.ReactElement {
             </button>
             <button className="widget-btn" onClick={handleOpenExternal} title="Open in browser">
               <ExternalLink size={14} />
+            </button>
+            <button
+              className="widget-btn"
+              onClick={handleZoomOut}
+              disabled={widget.zoomLevel <= 0.25}
+              title="Zoom out"
+            >
+              <ZoomOut size={14} />
+            </button>
+            <button
+              className="widget-btn"
+              onClick={handleZoomIn}
+              disabled={widget.zoomLevel >= 2}
+              title="Zoom in"
+            >
+              <ZoomIn size={14} />
+            </button>
+            <button className="widget-btn" onClick={handleDuplicate} title="Duplicate">
+              <Copy size={14} />
             </button>
             <button className="widget-btn" onClick={handleEditClick} title="Settings">
               <Settings size={14} />

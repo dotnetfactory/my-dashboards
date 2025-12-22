@@ -9,17 +9,42 @@ interface WidgetWebviewProps {
 
 export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React.ReactElement {
   const webviewRef = useRef<Electron.WebviewTag>(null);
+  const zoomLevelRef = useRef(widget.zoomLevel);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep zoom level ref updated
+  useEffect(() => {
+    zoomLevelRef.current = widget.zoomLevel;
+  }, [widget.zoomLevel]);
+
+  // Fallback timeout to clear loading state after 30 seconds
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.warn('Widget loading timeout - forcing loading state to false');
+        setLoading(false);
+      }
+    }, 4000);
+    return () => clearTimeout(timeout);
+  }, [loading, refreshKey]);
 
   useEffect(() => {
     const webview = webviewRef.current;
     if (!webview) return;
 
     const handleDomReady = async () => {
-      setLoading(false);
+      try {
+        setLoading(false);
 
-      const currentUrl = webview.getURL().toLowerCase();
+        // Apply zoom level using webview's native zoom
+        try {
+          webview.setZoomFactor(zoomLevelRef.current);
+        } catch (err) {
+          console.error('Failed to set zoom factor:', err);
+        }
+
+        const currentUrl = webview.getURL().toLowerCase();
 
       // Check if we're on a login page
       const loginPatterns = ['login', 'signin', 'sign-in', 'auth', 'account'];
@@ -155,6 +180,10 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
           console.error('Failed to scroll:', err);
         }
       }
+      } catch (err) {
+        console.error('Error in handleDomReady:', err);
+        setLoading(false);
+      }
     };
 
     const handleLoadStart = () => {
@@ -170,16 +199,22 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       setLoading(false);
     };
 
+    const handleDidFinishLoad = () => {
+      setLoading(false);
+    };
+
     webview.addEventListener('dom-ready', handleDomReady);
     webview.addEventListener('did-start-loading', handleLoadStart);
     webview.addEventListener('did-fail-load', handleDidFail);
+    webview.addEventListener('did-finish-load', handleDidFinishLoad);
 
     return () => {
       webview.removeEventListener('dom-ready', handleDomReady);
       webview.removeEventListener('did-start-loading', handleLoadStart);
       webview.removeEventListener('did-fail-load', handleDidFail);
+      webview.removeEventListener('did-finish-load', handleDidFinishLoad);
     };
-  }, [widget, refreshKey]);
+  }, [widget.id, widget.url, widget.hasCredentials, widget.selectorType, widget.selectorData, refreshKey]);
 
   // Reload webview when refreshKey changes
   useEffect(() => {
@@ -187,6 +222,18 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       webviewRef.current.reload();
     }
   }, [refreshKey]);
+
+  // Update zoom level when it changes (without reload)
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (webview) {
+      try {
+        webview.setZoomFactor(widget.zoomLevel);
+      } catch {
+        // Webview might not be ready yet, ignore
+      }
+    }
+  }, [widget.zoomLevel]);
 
   const performAutoLogin = async (
     webview: Electron.WebviewTag,
@@ -281,15 +328,11 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       return {
         width: cropData.width,
         height: cropData.height,
-        transform: `scale(${widget.zoomLevel})`,
-        transformOrigin: 'top left',
       };
     }
     return {
       width: '100%',
       height: '100%',
-      transform: `scale(${widget.zoomLevel})`,
-      transformOrigin: 'top left',
     };
   };
 
