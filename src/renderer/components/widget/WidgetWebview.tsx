@@ -106,7 +106,10 @@ export function WidgetWebview({ widget, refreshKey }: WidgetWebviewProps): React
       setError('Failed to capture screenshot');
       setLoading(false);
     }
-  }, [widget.id, widget.url, widget.partition, widget.selectorType, widget.selectorData, widget.hasCredentials, widget.credentialGroupId]);
+  // Stringify selectorData to compare by value, not reference
+  // This prevents unnecessary re-captures when refreshWidgets() creates new object references
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widget.id, widget.url, widget.partition, widget.selectorType, JSON.stringify(widget.selectorData), widget.hasCredentials, widget.credentialGroupId]);
 
   // Initial capture and refresh handling
   useEffect(() => {

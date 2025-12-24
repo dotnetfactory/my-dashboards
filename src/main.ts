@@ -125,15 +125,21 @@ const PICKER_HEIGHT = 1080;
 // Create offscreen window for capturing widget screenshots
 // Uses the same dimensions as the picker so crop coordinates match exactly
 const captureWidgetScreenshot = async (request: ScreenshotCaptureRequest): Promise<string | null> => {
+  // Don't use offscreen: true as it has different scaling behavior on HiDPI displays
+  // Instead, create a hidden window that matches the picker window exactly
   const captureWindow = new BrowserWindow({
     width: PICKER_WIDTH,
     height: PICKER_HEIGHT,
     show: false,
+    // Use content size to ensure the viewport matches exactly
+    useContentSize: true,
+    // Position off-screen so it's truly invisible
+    x: -10000,
+    y: -10000,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       partition: `persist:${request.partition}`,
-      offscreen: true,
     },
   });
 
@@ -230,6 +236,13 @@ const captureWidgetScreenshot = async (request: ScreenshotCaptureRequest): Promi
       // Scroll to crop position - these coordinates come from the picker at same dimensions
       const { scrollX = 0, scrollY = 0, x = 0, y = 0, width = 800, height = 600 } = request.selectorData;
 
+      // Get the device pixel ratio to understand any scaling
+      const dpr = await captureWindow.webContents.executeJavaScript('window.devicePixelRatio');
+      const innerSize = await captureWindow.webContents.executeJavaScript(
+        '({ width: window.innerWidth, height: window.innerHeight })'
+      );
+      console.log('[Screenshot] Crop capture - DPR:', dpr, 'innerSize:', innerSize, 'crop:', { x, y, width, height, scrollX, scrollY });
+
       await captureWindow.webContents.executeJavaScript(
         `window.scrollTo(${scrollX}, ${scrollY})`
       );
@@ -243,6 +256,7 @@ const captureWidgetScreenshot = async (request: ScreenshotCaptureRequest): Promi
         width: Math.min(width, PICKER_WIDTH - x),
         height: Math.min(height, PICKER_HEIGHT - y),
       };
+      console.log('[Screenshot] Final captureRect:', captureRect);
     }
 
     // Capture the page
@@ -337,6 +351,8 @@ const createPickerWindow = (url: string, partition?: string): Promise<{ url: str
       height: PICKER_HEIGHT,
       parent: mainWindow || undefined,
       modal: false,
+      // Use content size to ensure viewport matches capture window exactly
+      useContentSize: true,
       webPreferences: {
         preload: path.join(__dirname, 'picker-preload.js'),
         contextIsolation: true,
