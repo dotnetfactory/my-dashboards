@@ -72,6 +72,30 @@ const dashboardsAPI = {
   delete: (id: string) => ipcRenderer.invoke('dashboards:delete', id),
 };
 
+// Screenshot capture request type
+interface ScreenshotCaptureRequest {
+  url: string;
+  partition: string;
+  selectorType: 'css' | 'crop';
+  selectorData: {
+    selectors?: string[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    scrollX?: number;
+    scrollY?: number;
+  };
+  credentials?: {
+    username: string;
+    password: string;
+    loginUrl: string;
+    usernameSelector: string;
+    passwordSelector: string;
+    submitSelector: string;
+  };
+}
+
 // Widgets API
 const widgetsAPI = {
   list: (dashboardId: string) => ipcRenderer.invoke('widgets:list', dashboardId),
@@ -80,6 +104,7 @@ const widgetsAPI = {
   update: (id: string, data: UpdateWidgetData) => ipcRenderer.invoke('widgets:update', id, data),
   delete: (id: string) => ipcRenderer.invoke('widgets:delete', id),
   updatePositions: (positions: WidgetPosition[]) => ipcRenderer.invoke('widgets:updatePositions', positions),
+  captureScreenshot: (request: ScreenshotCaptureRequest) => ipcRenderer.invoke('widget:captureScreenshot', request),
 };
 
 // Credentials API
@@ -93,7 +118,7 @@ const credentialsAPI = {
 
 // Widget Picker API
 const widgetPickerAPI = {
-  open: (url: string) => ipcRenderer.invoke('widgetPicker:open', url),
+  open: (url: string, partition?: string) => ipcRenderer.invoke('widgetPicker:open', url, partition),
   onSelectionComplete: (callback: (selection: PickerSelection) => void) => {
     ipcRenderer.on('widgetPicker:selectionComplete', (_, selection) => callback(selection));
   },

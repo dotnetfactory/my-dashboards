@@ -94,6 +94,183 @@ let mainWindow: BrowserWindow | null = null;
 let pickerWindow: BrowserWindow | null = null;
 let credentialPickerWindow: BrowserWindow | null = null;
 
+// Screenshot capture data - uses picker dimensions (1400x900) for consistency
+interface ScreenshotCaptureRequest {
+  url: string;
+  partition: string;
+  selectorType: 'css' | 'crop';
+  selectorData: {
+    selectors?: string[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    scrollX?: number;
+    scrollY?: number;
+  };
+  credentials?: {
+    username: string;
+    password: string;
+    loginUrl: string;
+    usernameSelector: string;
+    passwordSelector: string;
+    submitSelector: string;
+  };
+}
+
+// Picker window dimensions - must match createPickerWindow
+const PICKER_WIDTH = 1920;
+const PICKER_HEIGHT = 1080;
+
+// Create offscreen window for capturing widget screenshots
+// Uses the same dimensions as the picker so crop coordinates match exactly
+const captureWidgetScreenshot = async (request: ScreenshotCaptureRequest): Promise<string | null> => {
+  const captureWindow = new BrowserWindow({
+    width: PICKER_WIDTH,
+    height: PICKER_HEIGHT,
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      partition: `persist:${request.partition}`,
+      offscreen: true,
+    },
+  });
+
+  try {
+    // Load the URL
+    await captureWindow.loadURL(request.url);
+
+    // Wait for DOM to be ready
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // If credentials provided and we're on a login page, perform login
+    if (request.credentials) {
+      const hasPasswordField = await captureWindow.webContents.executeJavaScript(
+        `!!document.querySelector('input[type="password"]')`
+      );
+
+      if (hasPasswordField) {
+        // Perform auto-login
+        const { usernameSelector, passwordSelector, submitSelector, username, password } = request.credentials;
+
+        await captureWindow.webContents.executeJavaScript(`
+          (function() {
+            const usernameEl = document.querySelector(${JSON.stringify(usernameSelector)});
+            const passwordEl = document.querySelector(${JSON.stringify(passwordSelector)});
+            if (usernameEl) {
+              usernameEl.focus();
+              usernameEl.value = ${JSON.stringify(username)};
+              usernameEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (passwordEl) {
+              passwordEl.focus();
+              passwordEl.value = ${JSON.stringify(password)};
+              passwordEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          })();
+        `);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await captureWindow.webContents.executeJavaScript(`
+          (function() {
+            const submitEl = document.querySelector(${JSON.stringify(submitSelector)});
+            if (submitEl) submitEl.click();
+          })();
+        `);
+
+        // Wait for navigation after login
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Navigate to target URL if different from login
+        const currentUrl = captureWindow.webContents.getURL().toLowerCase();
+        const targetPath = new URL(request.url).pathname.toLowerCase();
+        const currentPath = new URL(currentUrl).pathname.toLowerCase();
+
+        if (targetPath && targetPath !== '/' && currentPath !== targetPath) {
+          await captureWindow.loadURL(request.url);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    // Wait for SPA content to render
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    let captureRect: Electron.Rectangle | undefined;
+
+    if (request.selectorType === 'css' && request.selectorData.selectors) {
+      // Scroll to and get bounds of the selected element
+      const elementBounds = await captureWindow.webContents.executeJavaScript(`
+        (function() {
+          const selectors = ${JSON.stringify(request.selectorData.selectors)};
+          const firstElement = selectors.map(s => document.querySelector(s)).find(Boolean);
+          if (firstElement) {
+            firstElement.scrollIntoView({ block: 'start', inline: 'start', behavior: 'instant' });
+            const rect = firstElement.getBoundingClientRect();
+            return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+          }
+          return null;
+        })();
+      `);
+
+      // Wait for scroll to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      if (elementBounds) {
+        captureRect = {
+          x: Math.max(0, elementBounds.x),
+          y: Math.max(0, elementBounds.y),
+          width: Math.min(elementBounds.width, PICKER_WIDTH - elementBounds.x),
+          height: Math.min(elementBounds.height, PICKER_HEIGHT - elementBounds.y),
+        };
+      }
+    } else if (request.selectorType === 'crop' && request.selectorData) {
+      // Scroll to crop position - these coordinates come from the picker at same dimensions
+      const { scrollX = 0, scrollY = 0, x = 0, y = 0, width = 800, height = 600 } = request.selectorData;
+
+      await captureWindow.webContents.executeJavaScript(
+        `window.scrollTo(${scrollX}, ${scrollY})`
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Use the exact crop rectangle from the picker
+      captureRect = {
+        x: Math.max(0, x),
+        y: Math.max(0, y),
+        width: Math.min(width, PICKER_WIDTH - x),
+        height: Math.min(height, PICKER_HEIGHT - y),
+      };
+    }
+
+    // Capture the page
+    const image = await captureWindow.webContents.capturePage(captureRect);
+    const dataUrl = image.toDataURL();
+
+    return dataUrl;
+  } catch (error) {
+    console.error('[Screenshot] Capture failed:', error);
+    return null;
+  } finally {
+    captureWindow.destroy();
+  }
+};
+
+// Register screenshot capture IPC handler
+ipcMain.handle('widget:captureScreenshot', async (_, request: ScreenshotCaptureRequest) => {
+  try {
+    const dataUrl = await captureWidgetScreenshot(request);
+    if (dataUrl) {
+      return { success: true, data: dataUrl };
+    }
+    return { success: false, error: { code: 'CAPTURE_FAILED', message: 'Failed to capture screenshot' } };
+  } catch (error) {
+    return { success: false, error: { code: 'CAPTURE_ERROR', message: String(error) } };
+  }
+});
+
 // Create credential picker window for selecting login form fields
 interface CredentialSelection {
   usernameSelector: string;
@@ -152,17 +329,20 @@ ipcMain.handle('credentialPicker:open', async (_, url: string) => {
 });
 
 // Create widget picker window for element selection
-const createPickerWindow = (url: string): Promise<{ url: string; selectorType: string; selectorData: unknown } | null> => {
+// partition parameter allows sharing session with the widget that will be created/edited
+const createPickerWindow = (url: string, partition?: string): Promise<{ url: string; selectorType: string; selectorData: unknown } | null> => {
   return new Promise((resolve) => {
     pickerWindow = new BrowserWindow({
-      width: 1400,
-      height: 900,
+      width: PICKER_WIDTH,
+      height: PICKER_HEIGHT,
       parent: mainWindow || undefined,
       modal: false,
       webPreferences: {
         preload: path.join(__dirname, 'picker-preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        // Use persistent partition so login session is shared with widget
+        partition: partition ? `persist:${partition}` : undefined,
       },
       title: 'Select Widget Content',
     });
@@ -190,9 +370,10 @@ const createPickerWindow = (url: string): Promise<{ url: string; selectorType: s
 };
 
 // Register widget picker IPC handler
-ipcMain.handle('widgetPicker:open', async (_, url: string) => {
+// partition parameter allows the picker to share session with the widget
+ipcMain.handle('widgetPicker:open', async (_, url: string, partition?: string) => {
   try {
-    const selection = await createPickerWindow(url);
+    const selection = await createPickerWindow(url, partition);
     if (selection) {
       mainWindow?.webContents.send('widgetPicker:selectionComplete', selection);
       return { success: true, data: selection };

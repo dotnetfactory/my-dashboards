@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Key, MousePointer, Check, Globe, ZoomIn, ZoomOut } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Clock, Key, MousePointer, Check, Globe, ZoomIn, ZoomOut, Plus } from 'lucide-react';
 import { useWidgets } from '../../hooks/useWidgets';
-import type { Widget, SaveCredentialsData, SelectorType, SelectorData } from '../../../types/dashboard';
+import { useCredentialGroups } from '../../hooks/useCredentialGroups';
+import { CredentialGroupCreator } from '../credential-groups/CredentialGroupCreator';
+import type { Widget, SaveCredentialsData, SelectorType, SelectorData, CreateCredentialGroupData } from '../../../types/dashboard';
 
 interface WidgetEditorProps {
   widget: Widget;
   onClose: () => void;
 }
 
+type AuthMode = 'credential-group' | 'per-widget' | 'none';
+
 export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.ReactElement {
   const { updateWidget } = useWidgets();
+  const { groups, createGroup } = useCredentialGroups();
   const [name, setName] = useState(widget.name);
   const [url, setUrl] = useState(widget.url);
   const [selectorType, setSelectorType] = useState<SelectorType>(widget.selectorType);
@@ -17,7 +23,17 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
   const [hasNewSelection, setHasNewSelection] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(widget.refreshInterval);
   const [zoomLevel, setZoomLevel] = useState(widget.zoomLevel);
-  const [hasCredentials, setHasCredentials] = useState(widget.hasCredentials);
+
+  // Auth mode state - determine initial mode from widget
+  const getInitialAuthMode = (): AuthMode => {
+    if (widget.credentialGroupId) return 'credential-group';
+    if (widget.hasCredentials) return 'per-widget';
+    return 'none';
+  };
+  const [authMode, setAuthMode] = useState<AuthMode>(getInitialAuthMode());
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(widget.credentialGroupId || '');
+  const [showGroupCreator, setShowGroupCreator] = useState(false);
+
   const [credentials, setCredentials] = useState<SaveCredentialsData>({
     username: '',
     password: '',
@@ -28,9 +44,9 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
   });
   const [loading, setLoading] = useState(false);
 
-  // Load existing credentials if widget has them
+  // Load existing per-widget credentials if widget has them (not credential group)
   useEffect(() => {
-    if (widget.hasCredentials) {
+    if (widget.hasCredentials && !widget.credentialGroupId) {
       window.api.credentials.get(widget.id).then((result) => {
         if (result.success && result.data) {
           setCredentials({
@@ -44,13 +60,15 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
         }
       });
     }
-  }, [widget.id, widget.hasCredentials]);
+  }, [widget.id, widget.hasCredentials, widget.credentialGroupId]);
 
   const handleOpenPicker = async () => {
     if (!url) return;
     setLoading(true);
     try {
-      const result = await window.api.widgetPicker.open(url);
+      // Pass the widget's partition so the picker shares the same session
+      // This allows logging in during selection and keeping the session
+      const result = await window.api.widgetPicker.open(url, widget.partition);
       if (result.success && result.data) {
         setSelectorType(result.data.selectorType as SelectorType);
         setSelectorData(result.data.selectorData as SelectorData);
@@ -83,6 +101,14 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
     }
   };
 
+  const handleCreateCredentialGroup = async (data: CreateCredentialGroupData) => {
+    const group = await createGroup(data);
+    if (group) {
+      setSelectedGroupId(group.id);
+      setShowGroupCreator(false);
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -104,13 +130,33 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
         updateData.selectorData = selectorData;
       }
 
+      // Handle credential group changes
+      if (authMode === 'credential-group' && selectedGroupId) {
+        updateData.credentialGroupId = selectedGroupId;
+        // Delete per-widget credentials if they existed
+        if (widget.hasCredentials && !widget.credentialGroupId) {
+          await window.api.credentials.delete(widget.id);
+        }
+      } else if (authMode === 'per-widget') {
+        // Remove credential group if switching to per-widget
+        if (widget.credentialGroupId) {
+          updateData.credentialGroupId = null;
+        }
+      } else if (authMode === 'none') {
+        // Remove both credential group and per-widget credentials
+        if (widget.credentialGroupId) {
+          updateData.credentialGroupId = null;
+        }
+        if (widget.hasCredentials && !widget.credentialGroupId) {
+          await window.api.credentials.delete(widget.id);
+        }
+      }
+
       await updateWidget(widget.id, updateData);
 
-      // Handle credentials
-      if (hasCredentials && credentials.username && credentials.usernameSelector) {
+      // Save per-widget credentials if using that mode
+      if (authMode === 'per-widget' && credentials.username && credentials.usernameSelector) {
         await window.api.credentials.save(widget.id, credentials);
-      } else if (!hasCredentials && widget.hasCredentials) {
-        await window.api.credentials.delete(widget.id);
       }
 
       onClose();
@@ -123,7 +169,30 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
 
   const hasSelectors = credentials.usernameSelector && credentials.passwordSelector;
 
-  return (
+  // Determine if save button should be disabled
+  const canSave = () => {
+    if (authMode === 'credential-group') {
+      return !!selectedGroupId;
+    }
+    if (authMode === 'per-widget') {
+      return credentials.username && credentials.password && hasSelectors;
+    }
+    return true; // 'none' mode always valid
+  };
+
+  // If showing the credential group creator, render it instead
+  if (showGroupCreator) {
+    return createPortal(
+      <CredentialGroupCreator
+        onClose={() => setShowGroupCreator(false)}
+        onCreate={handleCreateCredentialGroup}
+        defaultLoginUrl={url}
+      />,
+      document.body
+    );
+  }
+
+  return createPortal(
     <div className="widget-editor-overlay" onMouseDown={(e) => e.stopPropagation()}>
       <div className="widget-editor">
         <button className="close-btn" onClick={onClose}>
@@ -233,60 +302,124 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
           </div>
 
           <div className="editor-section">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={hasCredentials}
-                onChange={(e) => setHasCredentials(e.target.checked)}
-              />
+            <label>
               <Key size={16} />
-              Auto-login Credentials
+              Authentication
             </label>
+            <div className="auth-options">
+              {/* No credentials option */}
+              <label className="auth-option">
+                <input
+                  type="radio"
+                  name="authMode"
+                  value="none"
+                  checked={authMode === 'none'}
+                  onChange={() => setAuthMode('none')}
+                />
+                <div className="auth-option-content">
+                  <strong>No Authentication</strong>
+                  <p>Public content, no login required</p>
+                </div>
+              </label>
 
-            {hasCredentials && (
-              <div className="credentials-form">
+              {/* Credential Group Option */}
+              <label className="auth-option">
                 <input
-                  type="text"
-                  value={credentials.username}
-                  onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-                  placeholder="Username or email"
+                  type="radio"
+                  name="authMode"
+                  value="credential-group"
+                  checked={authMode === 'credential-group'}
+                  onChange={() => setAuthMode('credential-group')}
                 />
+                <div className="auth-option-content">
+                  <strong>Use Credential Group</strong>
+                  <p>Share credentials and session with other widgets</p>
+                </div>
+              </label>
+
+              {authMode === 'credential-group' && (
+                <div className="credential-group-selector">
+                  <select
+                    value={selectedGroupId}
+                    onChange={(e) => setSelectedGroupId(e.target.value)}
+                  >
+                    <option value="">Select a credential group...</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name} ({group.username})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="create-new-btn"
+                    onClick={() => setShowGroupCreator(true)}
+                  >
+                    <Plus size={14} />
+                    Create New Credential Group
+                  </button>
+                </div>
+              )}
+
+              {/* Per-Widget Option */}
+              <label className="auth-option">
                 <input
-                  type="password"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                  placeholder="Password"
+                  type="radio"
+                  name="authMode"
+                  value="per-widget"
+                  checked={authMode === 'per-widget'}
+                  onChange={() => setAuthMode('per-widget')}
                 />
-                <input
-                  type="text"
-                  value={credentials.loginUrl}
-                  onChange={(e) => setCredentials({ ...credentials, loginUrl: e.target.value })}
-                  placeholder="Login page URL (leave empty to use widget URL)"
-                />
-                <button
-                  className={`selector-btn ${hasSelectors ? 'selected' : ''}`}
-                  onClick={handleOpenCredentialPicker}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div className="spinner small"></div>
-                      Opening...
-                    </>
-                  ) : hasSelectors ? (
-                    <>
-                      <Check size={16} />
-                      Form Fields Selected
-                    </>
-                  ) : (
-                    <>
-                      <MousePointer size={16} />
-                      Select Login Form Fields
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
+                <div className="auth-option-content">
+                  <strong>Widget-Specific Credentials</strong>
+                  <p>Store credentials only for this widget (isolated session)</p>
+                </div>
+              </label>
+
+              {authMode === 'per-widget' && (
+                <div className="credential-group-selector">
+                  <input
+                    type="text"
+                    value={credentials.username}
+                    onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+                    placeholder="Username or email"
+                  />
+                  <input
+                    type="password"
+                    value={credentials.password}
+                    onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                    placeholder="Password"
+                  />
+                  <input
+                    type="text"
+                    value={credentials.loginUrl}
+                    onChange={(e) => setCredentials({ ...credentials, loginUrl: e.target.value })}
+                    placeholder="Login page URL (optional)"
+                  />
+                  <button
+                    className={`selector-btn ${hasSelectors ? 'selected' : ''}`}
+                    onClick={handleOpenCredentialPicker}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="spinner small"></div>
+                        Opening...
+                      </>
+                    ) : hasSelectors ? (
+                      <>
+                        <Check size={16} />
+                        Form Fields Selected
+                      </>
+                    ) : (
+                      <>
+                        <MousePointer size={16} />
+                        Select Login Form Fields
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -297,13 +430,14 @@ export function WidgetEditor({ widget, onClose }: WidgetEditorProps): React.Reac
           <button
             className="primary"
             onClick={handleSave}
-            disabled={loading || (hasCredentials && (!credentials.username || !hasSelectors))}
+            disabled={loading || !canSave()}
           >
             Save Changes
             {loading && <div className="spinner small"></div>}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

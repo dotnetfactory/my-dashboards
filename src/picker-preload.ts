@@ -82,146 +82,167 @@ function generateSelector(element: Element): string {
   return path.join(' > ');
 }
 
+// Inject styles without using innerHTML (to avoid CSP issues)
+function injectStyles(): void {
+  const style = document.createElement('style');
+  style.textContent = `
+    #widget-picker-toolbar {
+      position: fixed !important;
+      top: 10px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      z-index: 2147483647 !important;
+      background: #1a1a2e !important;
+      border-radius: 12px !important;
+      padding: 12px 20px !important;
+      display: flex !important;
+      gap: 12px !important;
+      align-items: center !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    #widget-picker-toolbar button {
+      padding: 10px 20px !important;
+      border: none !important;
+      border-radius: 8px !important;
+      cursor: pointer !important;
+      font-size: 14px !important;
+      font-weight: 500 !important;
+      transition: all 0.2s ease !important;
+    }
+    #widget-picker-toolbar .mode-btn {
+      background: #2d2d44 !important;
+      color: #fff !important;
+    }
+    #widget-picker-toolbar .mode-btn:hover {
+      background: #3d3d5c !important;
+    }
+    #widget-picker-toolbar .mode-btn.active {
+      background: #6366f1 !important;
+      color: #fff !important;
+    }
+    #widget-picker-toolbar .cancel-btn {
+      background: #dc2626 !important;
+      color: #fff !important;
+    }
+    #widget-picker-toolbar .cancel-btn:hover {
+      background: #ef4444 !important;
+    }
+    #widget-picker-toolbar .done-btn {
+      background: #22c55e !important;
+      color: #fff !important;
+      display: none !important;
+    }
+    #widget-picker-toolbar .done-btn:hover {
+      background: #16a34a !important;
+    }
+    #widget-picker-toolbar .done-btn.visible {
+      display: block !important;
+    }
+    #widget-picker-toolbar .status {
+      color: #a1a1aa !important;
+      font-size: 13px !important;
+      margin-left: 8px !important;
+    }
+    #widget-picker-toolbar .selection-count {
+      background: #6366f1 !important;
+      color: #fff !important;
+      padding: 4px 12px !important;
+      border-radius: 16px !important;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      display: none !important;
+    }
+    #widget-picker-toolbar .selection-count.visible {
+      display: block !important;
+    }
+    #widget-picker-highlight {
+      position: fixed !important;
+      pointer-events: none !important;
+      z-index: 2147483646 !important;
+      border: 3px solid #6366f1 !important;
+      background: rgba(99, 102, 241, 0.15) !important;
+      transition: all 0.1s ease !important;
+    }
+    #widget-picker-crop-overlay {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      z-index: 2147483645 !important;
+      cursor: crosshair !important;
+    }
+    #widget-picker-crop-selection {
+      position: fixed !important;
+      border: 3px dashed #6366f1 !important;
+      background: rgba(99, 102, 241, 0.2) !important;
+      z-index: 2147483646 !important;
+      pointer-events: none !important;
+    }
+    .widget-picker-selected {
+      position: fixed !important;
+      pointer-events: none !important;
+      z-index: 2147483645 !important;
+      border: 3px solid #22c55e !important;
+      background: rgba(34, 197, 94, 0.15) !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // Create the floating toolbar
 function createToolbar(): void {
+  // Inject styles first
+  injectStyles();
+
   toolbar = document.createElement('div');
   toolbar.id = 'widget-picker-toolbar';
-  toolbar.innerHTML = `
-    <style>
-      #widget-picker-toolbar {
-        position: fixed;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 2147483647;
-        background: #1a1a2e;
-        border-radius: 12px;
-        padding: 12px 20px;
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-      }
-      #widget-picker-toolbar button {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-      }
-      #widget-picker-toolbar .mode-btn {
-        background: #2d2d44;
-        color: #fff;
-      }
-      #widget-picker-toolbar .mode-btn:hover {
-        background: #3d3d5c;
-      }
-      #widget-picker-toolbar .mode-btn.active {
-        background: #6366f1;
-        color: #fff;
-      }
-      #widget-picker-toolbar .cancel-btn {
-        background: #dc2626;
-        color: #fff;
-      }
-      #widget-picker-toolbar .cancel-btn:hover {
-        background: #ef4444;
-      }
-      #widget-picker-toolbar .done-btn {
-        background: #22c55e;
-        color: #fff;
-        display: none;
-      }
-      #widget-picker-toolbar .done-btn:hover {
-        background: #16a34a;
-      }
-      #widget-picker-toolbar .done-btn.visible {
-        display: block;
-      }
-      #widget-picker-toolbar .status {
-        color: #a1a1aa;
-        font-size: 13px;
-        margin-left: 8px;
-      }
-      #widget-picker-toolbar .selection-count {
-        background: #6366f1;
-        color: #fff;
-        padding: 4px 12px;
-        border-radius: 16px;
-        font-size: 13px;
-        font-weight: 600;
-        display: none;
-      }
-      #widget-picker-toolbar .selection-count.visible {
-        display: block;
-      }
-      #widget-picker-highlight {
-        position: fixed;
-        pointer-events: none;
-        z-index: 2147483646;
-        border: 3px solid #6366f1;
-        background: rgba(99, 102, 241, 0.15);
-        transition: all 0.1s ease;
-      }
-      #widget-picker-crop-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 2147483645;
-        cursor: crosshair;
-      }
-      #widget-picker-crop-selection {
-        position: fixed;
-        border: 3px dashed #6366f1;
-        background: rgba(99, 102, 241, 0.2);
-        z-index: 2147483646;
-        pointer-events: none;
-      }
-      .widget-picker-selected {
-        position: fixed;
-        pointer-events: none;
-        z-index: 2147483645;
-        border: 3px solid #22c55e;
-        background: rgba(34, 197, 94, 0.15);
-      }
-      .widget-picker-selected::after {
-        content: attr(data-index);
-        position: absolute;
-        top: -12px;
-        left: -12px;
-        width: 24px;
-        height: 24px;
-        background: #22c55e;
-        color: white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        font-weight: bold;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-    </style>
-    <button class="mode-btn" id="btn-css">Select Elements</button>
-    <button class="mode-btn" id="btn-crop">Crop Region</button>
-    <span class="selection-count" id="selection-count">0 selected</span>
-    <span class="status" id="picker-status">Choose a selection mode</span>
-    <button class="done-btn" id="btn-done">Done</button>
-    <button class="cancel-btn" id="btn-cancel">Cancel</button>
-  `;
-  document.body.appendChild(toolbar);
 
-  // Button handlers
-  document.getElementById('btn-css')?.addEventListener('click', () => enterCssMode());
-  document.getElementById('btn-crop')?.addEventListener('click', () => enterCropMode());
-  document.getElementById('btn-done')?.addEventListener('click', () => finishSelection());
-  document.getElementById('btn-cancel')?.addEventListener('click', () => cancel());
+  // Create buttons programmatically to avoid innerHTML CSP issues
+  const cssBtn = document.createElement('button');
+  cssBtn.className = 'mode-btn';
+  cssBtn.id = 'btn-css';
+  cssBtn.textContent = 'Select Elements';
+  cssBtn.addEventListener('click', () => enterCssMode());
+
+  const cropBtn = document.createElement('button');
+  cropBtn.className = 'mode-btn';
+  cropBtn.id = 'btn-crop';
+  cropBtn.textContent = 'Crop Region';
+  cropBtn.addEventListener('click', () => enterCropMode());
+
+  const selectionCount = document.createElement('span');
+  selectionCount.className = 'selection-count';
+  selectionCount.id = 'selection-count';
+  selectionCount.textContent = '0 selected';
+
+  const status = document.createElement('span');
+  status.className = 'status';
+  status.id = 'picker-status';
+  status.textContent = 'Choose a selection mode';
+
+  const doneBtn = document.createElement('button');
+  doneBtn.className = 'done-btn';
+  doneBtn.id = 'btn-done';
+  doneBtn.textContent = 'Done';
+  doneBtn.addEventListener('click', () => finishSelection());
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel-btn';
+  cancelBtn.id = 'btn-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => cancel());
+
+  toolbar.appendChild(cssBtn);
+  toolbar.appendChild(cropBtn);
+  toolbar.appendChild(selectionCount);
+  toolbar.appendChild(status);
+  toolbar.appendChild(doneBtn);
+  toolbar.appendChild(cancelBtn);
+
+  document.body.appendChild(toolbar);
 }
 
 // Create highlight overlay for CSS mode
@@ -481,6 +502,24 @@ if (document.readyState === 'loading') {
 }
 
 function init(): void {
-  createToolbar();
-  createHighlightOverlay();
+  // Wait a bit for SPAs to render their content
+  // This helps with sites like YouTube Studio that load content dynamically
+  const tryInit = () => {
+    if (!document.body) {
+      console.log('[Picker] Waiting for body...');
+      setTimeout(tryInit, 500);
+      return;
+    }
+    console.log('[Picker] Initializing toolbar...');
+    try {
+      createToolbar();
+      createHighlightOverlay();
+      console.log('[Picker] Toolbar created successfully');
+    } catch (err) {
+      console.error('[Picker] Failed to create toolbar:', err);
+    }
+  };
+
+  // Initial delay to let SPAs render
+  setTimeout(tryInit, 1000);
 }

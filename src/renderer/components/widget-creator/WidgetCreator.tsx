@@ -10,12 +10,16 @@ import type {
   CreateCredentialGroupData,
 } from '../../../types/dashboard';
 
+// Global session partition - shared by all widgets that opt into it
+const GLOBAL_SESSION_PARTITION = 'global-session';
+
 interface WidgetCreatorProps {
   onClose: () => void;
 }
 
 type Step = 'url' | 'selector' | 'settings' | 'auth';
 type AuthMode = 'credential-group' | 'per-widget' | 'none';
+type SessionMode = 'global' | 'isolated';
 
 export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactElement {
   const { createWidget } = useWidgets();
@@ -27,6 +31,9 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
   const [selectorData, setSelectorData] = useState<SelectorData | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(300);
   const [hasCredentials, setHasCredentials] = useState(false);
+
+  // Session mode - global shares session across widgets, isolated is unique per widget
+  const [sessionMode, setSessionMode] = useState<SessionMode>('global');
 
   // Auth mode state
   const [authMode, setAuthMode] = useState<AuthMode>('credential-group');
@@ -48,7 +55,9 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
     if (!url) return;
     setLoading(true);
     try {
-      const result = await window.api.widgetPicker.open(url);
+      // Use global session partition so login during picker is preserved
+      const partition = sessionMode === 'global' ? GLOBAL_SESSION_PARTITION : undefined;
+      const result = await window.api.widgetPicker.open(url, partition);
       if (result.success && result.data) {
         setSelectorType(result.data.selectorType as SelectorType);
         setSelectorData(result.data.selectorData as SelectorData);
@@ -97,6 +106,9 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
       // Determine credential group ID based on auth mode
       const credentialGroupId = authMode === 'credential-group' && selectedGroupId ? selectedGroupId : undefined;
 
+      // Use global session partition if selected (unless using credential group which has its own)
+      const partition = !credentialGroupId && sessionMode === 'global' ? GLOBAL_SESSION_PARTITION : undefined;
+
       const widget = await createWidget({
         name: name || new URL(url).hostname,
         url,
@@ -104,6 +116,7 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
         selectorData,
         refreshInterval,
         credentialGroupId,
+        partition,
       });
 
       // Only save per-widget credentials if using legacy mode
@@ -188,6 +201,36 @@ export function WidgetCreator({ onClose }: WidgetCreatorProps): React.ReactEleme
               <MousePointer size={24} />
               <h3>Select Content</h3>
               <p>Open the page and select the element or region you want to capture</p>
+            </div>
+            <div className="step-content">
+              <div className="session-mode-selector">
+                <label className="session-option">
+                  <input
+                    type="radio"
+                    name="sessionMode"
+                    value="global"
+                    checked={sessionMode === 'global'}
+                    onChange={() => setSessionMode('global')}
+                  />
+                  <div className="session-option-content">
+                    <strong>Shared Session</strong>
+                    <p>Share login with other widgets (recommended)</p>
+                  </div>
+                </label>
+                <label className="session-option">
+                  <input
+                    type="radio"
+                    name="sessionMode"
+                    value="isolated"
+                    checked={sessionMode === 'isolated'}
+                    onChange={() => setSessionMode('isolated')}
+                  />
+                  <div className="session-option-content">
+                    <strong>Isolated Session</strong>
+                    <p>Separate login for this widget only</p>
+                  </div>
+                </label>
+              </div>
             </div>
             <div className="step-content selector-options">
               <button className="selector-btn" onClick={handleOpenPicker} disabled={loading}>

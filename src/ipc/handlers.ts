@@ -317,8 +317,11 @@ export function registerIPCHandlers(): void {
       const id = generateId();
       const now = Date.now();
 
-      // Determine partition: use credential group's partition if specified
-      let partition = `widget-${id}`;
+      // Determine partition priority:
+      // 1. Credential group's partition (if specified)
+      // 2. Pre-generated partition from picker (if provided)
+      // 3. Generate new widget-specific partition
+      let partition = data.partition || `widget-${id}`;
       let hasCredentials = 0;
       let credentialGroupId: string | null = null;
 

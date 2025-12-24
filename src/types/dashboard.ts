@@ -73,6 +73,8 @@ export interface CreateWidgetData {
   refreshInterval?: number;
   zoomLevel?: number;
   credentialGroupId?: string;
+  // Optional pre-generated partition (used when picker session should be preserved)
+  partition?: string;
 }
 
 export interface UpdateWidgetData {

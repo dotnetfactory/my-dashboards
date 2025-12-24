@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, Plus, Trash2, Edit2, Check, X, Sun, Moon } from 'lucide-react';
 import { useDashboardContext } from '../../context/DashboardContext';
 
 export function DashboardSidebar(): React.ReactElement {
@@ -10,6 +10,37 @@ export function DashboardSidebar(): React.ReactElement {
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+
+  // Load theme preference on mount
+  useEffect(() => {
+    const loadTheme = async () => {
+      const result = await window.api.settings.get('theme');
+      if (result.success && result.data) {
+        const savedTheme = result.data as 'light' | 'dark' | 'system';
+        setTheme(savedTheme);
+        applyTheme(savedTheme);
+      }
+    };
+    loadTheme();
+  }, []);
+
+  const applyTheme = (newTheme: 'light' | 'dark' | 'system') => {
+    const root = document.documentElement;
+    if (newTheme === 'system') {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', newTheme);
+    }
+  };
+
+  const toggleTheme = async () => {
+    // Cycle through: system -> light -> dark -> system
+    const nextTheme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    await window.api.settings.set('theme', nextTheme);
+  };
 
   const handleCreate = async () => {
     if (newName.trim()) {
@@ -140,6 +171,15 @@ export function DashboardSidebar(): React.ReactElement {
             <button onClick={() => setIsCreating(true)}>Create your first dashboard</button>
           </div>
         )}
+      </div>
+
+      <div className="sidebar-footer">
+        <button className="theme-toggle" onClick={toggleTheme} title={`Theme: ${theme}`}>
+          {theme === 'dark' ? <Moon size={18} /> : theme === 'light' ? <Sun size={18} /> : <Sun size={18} />}
+          <span className="theme-label">
+            {theme === 'system' ? 'System' : theme === 'light' ? 'Light' : 'Dark'}
+          </span>
+        </button>
       </div>
     </div>
   );

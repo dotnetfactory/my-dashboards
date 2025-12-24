@@ -108,6 +108,32 @@ export interface DashboardsAPI {
 }
 
 /**
+ * Screenshot capture request
+ */
+export interface ScreenshotCaptureRequest {
+  url: string;
+  partition: string;
+  selectorType: 'css' | 'crop';
+  selectorData: {
+    selectors?: string[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    scrollX?: number;
+    scrollY?: number;
+  };
+  credentials?: {
+    username: string;
+    password: string;
+    loginUrl: string;
+    usernameSelector: string;
+    passwordSelector: string;
+    submitSelector: string;
+  };
+}
+
+/**
  * Widgets API for managing dashboard widgets
  */
 export interface WidgetsAPI {
@@ -117,6 +143,7 @@ export interface WidgetsAPI {
   update: (id: string, data: UpdateWidgetData) => Promise<IPCResponse<Widget>>;
   delete: (id: string) => Promise<IPCResponse<void>>;
   updatePositions: (positions: WidgetPosition[]) => Promise<IPCResponse<void>>;
+  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<IPCResponse<string>>;
 }
 
 /**
@@ -131,9 +158,10 @@ export interface CredentialsAPI {
 
 /**
  * Widget Picker API for element selection
+ * @param partition - Optional partition to share session with the widget
  */
 export interface WidgetPickerAPI {
-  open: (url: string) => Promise<IPCResponse<PickerSelection | null>>;
+  open: (url: string, partition?: string) => Promise<IPCResponse<PickerSelection | null>>;
   onSelectionComplete: (callback: (selection: PickerSelection) => void) => void;
   removeSelectionListener: () => void;
 }

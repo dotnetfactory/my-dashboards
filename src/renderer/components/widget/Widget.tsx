@@ -82,10 +82,14 @@ export function Widget({ widget }: WidgetProps): React.ReactElement {
       selectorData: widget.selectorData,
       refreshInterval: widget.refreshInterval,
       zoomLevel: widget.zoomLevel,
+      credentialGroupId: widget.credentialGroupId ?? undefined,
+      // Preserve the partition so duplicated widget shares the same session
+      // (credential group widgets get their partition from the group in handlers.ts)
+      partition: widget.credentialGroupId ? undefined : widget.partition,
     });
 
-    // Copy credentials if the original widget has them
-    if (widget.hasCredentials && newWidget) {
+    // Copy per-widget credentials if the original widget has them (not credential group)
+    if (widget.hasCredentials && !widget.credentialGroupId && newWidget) {
       const credResult = await window.api.credentials.get(widget.id);
       if (credResult.success && credResult.data) {
         await window.api.credentials.save(newWidget.id, {
